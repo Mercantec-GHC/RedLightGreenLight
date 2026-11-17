@@ -22,7 +22,6 @@ void setup() {
 // logic for detecting movement
 bool readMotion(float x, float y, float z){
 
-
   // Saves the initial state ONCE
   if (!stateSaved) {
     previousX = x;
@@ -54,9 +53,9 @@ void startRedLight() {
   redLight = true;
 }
 
-//if holding from opisite of 02 
-// forward and backwards = y
-// sides = x
+// if holding from opisite of 02 
+// forward & backwards = y
+// left & right = x
 // up and down = z
 void loop() {
   float x, y, z;
@@ -71,7 +70,7 @@ void loop() {
       Serial.println("No movement");
     }
 
-
+    // prints all movements for debuggin
     // Serial.print("x ");
     // Serial.print(x);
     // Serial.print('\t');

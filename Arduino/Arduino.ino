@@ -1,21 +1,13 @@
-/*
-  Arduino LSM6DS3 - Simple Accelerometer
-
-  This example reads the acceleration values from the LSM6DS3
-  sensor and continuously prints them to the Serial Monitor
-  or Serial Plotter.
-
-  The circuit:
-  - Arduino Uno WiFi Rev 2 or Arduino Nano 33 IoT
-
-  created 10 Jul 2019
-  by Riccardo Rizzo
-
-  This example code is in the public domain.
-*/
-
 #include <Arduino_MKRIoTCarrier.h>
 MKRIoTCarrier carrier;
+
+float previousX = 0.00;
+float previousY = 0.00;
+float previousZ = 0.00;
+
+float tolerance = 0.15f;
+bool redLight = true;
+bool stateSaved = false;
 
 void setup() {
   Serial.begin(9600);
@@ -30,20 +22,38 @@ void setup() {
 // logic for detecting movement
 bool readMotion(float x, float y, float z){
 
-  if (x > 0.15f || x < -0.15f) {
-    return true;
+
+  // Saves the initial state ONCE
+  if (!stateSaved) {
+    previousX = x;
+    previousY = y;
+    previousZ = z;
+
+    stateSaved = true;
+    return false;
   }
 
-  if (y > 0.15f || y < -0.15f) {
+
+  // Calculate differences 
+  float differenceX = abs(x - previousX);
+  float differenceY = abs(y - previousY);
+  float differenceZ = abs(z - previousZ);
+
+  // Checks if any axis changed beyond tolerance
+  if (differenceX > tolerance ||
+      differenceY > tolerance ||
+      differenceZ > tolerance) {
+
     return true;
   }
-
-  if (z > 1.15f || z < -1.15f) {
-    return true;
-  }
-
   return false;
 }
+
+void startRedLight() {
+  stateSaved = false;
+  redLight = true;
+}
+
 //if holding from opisite of 02 
 // forward and backwards = y
 // sides = x
@@ -60,6 +70,7 @@ void loop() {
     else {
       Serial.println("No movement");
     }
+
 
     // Serial.print("x ");
     // Serial.print(x);

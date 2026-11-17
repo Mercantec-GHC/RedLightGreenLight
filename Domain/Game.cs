@@ -27,7 +27,7 @@
             if (!State.Equals(GameState.Waiting)) { Console.WriteLine("Cannot join a game that has already started."); return GameResult.GameAlreadyStarted; }
             if (Players.Count >= MaxPlayers) { Console.WriteLine("Maximum number of players reached."); return GameResult.MaxPlayersReached; }
             Players.Add(new Player(name, NextPlayerId++));
-            OnChanged();
+            OnChanged?.Invoke();
             return GameResult.Success;
         }
 
@@ -35,50 +35,102 @@
         {
             if (Host != null) { Console.WriteLine("A host is already assigned to this game."); return GameResult.HostAlreadyAssigned; }
             Host = new Host(id);
-            OnChanged();
+            OnChanged?.Invoke();
             return GameResult.Success;
         }
         public GameResult RemovePlayer(int id)
         {
             if (!Players.Exists(p => p.Id == id)) { Console.WriteLine("Player not found."); return GameResult.PlayerNotFound; }
             Players.RemoveAll(p => p.Id == id);
-            OnChanged();
+            OnChanged?.Invoke();
             return GameResult.Success;
         }
 
-        public GameResult Start()
+        public async Task<GameResult> Start()
         {
+            if (!State.Equals(GameState.Waiting)) { Console.WriteLine("Game has already started."); return GameResult.GameAlreadyStarted; }
             if (Host == null) { Console.WriteLine("Cannot start a game without a host."); return GameResult.NoHost; }
             if (!Players.Any()) { Console.WriteLine("Cannot start a game with no players."); return GameResult.NoPlayers; }
-            if (Players.Exists(p => p.State != Player.PlayerState.Ready)) { Console.WriteLine("Cannot start a game with players who are not ready."); return GameResult.PlayersNotReady; }
+            if (Players.Exists(p => p.State != PlayerState.Ready)) { Console.WriteLine("Cannot start a game with players who are not ready."); return GameResult.PlayersNotReady; }
 
-            Players.ForEach(p => p.State = Player.PlayerState.Playing);
-            State = GameState.GreenLight;
+            Players.ForEach(p => p.State = PlayerState.Playing);
 
-
-            OnChanged();
-            return GameResult.Success;
-
-            // Start the game loop in a separate thread or task
+            OnChanged?.Invoke();
+            await Loop();
+            return End();
         }
-        public void End()
+        public GameResult End()
         {
-            
-
             State = GameState.Finished;
-
-            // Anounce winner
             OnChanged();
+
+            if (Players.Any(p => p.State == PlayerState.Won))
+            {
+                var winner = Players.First(p => p.State == PlayerState.Won);
+                Console.WriteLine($"Player {winner.Name} has won the game!");
+                return GameResult.PlayerWon;
+            }
+            else
+            {
+                Console.WriteLine("No players won the game.");
+                return GameResult.AllIsLost;
+            }
         }
 
-        public void PlayerMoved(Player player)
+        public async Task Loop()
         {
-            if (State != GameState.RedLight) return;
-            if (!player.State.Equals(Player.PlayerState.Playing)) { Console.WriteLine("Player is not playing."); return; }
+            while (State != GameState.Finished)
+            {
+                // Green Light
+                State = GameState.GreenLight;
+                OnChanged?.Invoke();
 
-            player.State = Player.PlayerState.Lost;
+                await Task.Delay(TimeBetweenStops * 1000);
+
+                if (State == GameState.Finished)
+                    break;
+
+                // Yellow Light
+                State = GameState.YellowLight;
+                OnChanged?.Invoke();
+
+                await Task.Delay(2000);
+
+                if (State == GameState.Finished)
+                    break;
+
+                // Red Light
+                State = GameState.RedLight;
+                OnChanged?.Invoke();
+
+                await Task.Delay(TimeBetweenStops * 1000);
+            }
+        }
+
+        public GameResult PlayerMoved(Player player)
+        {
+            if (State != GameState.RedLight) return GameResult.Success;
+            if (!player.State.Equals(PlayerState.Playing)) { Console.WriteLine("Player is not playing."); return GameResult.PlayerNotPlaying; }
+
+            player.State = PlayerState.Lost;
             Console.WriteLine($"Player {player.Name} has lost the game for moving during Red Light.");
-            OnChanged();
+            
+            if (Players.All(p => p.State != PlayerState.Playing))
+            {
+                Console.WriteLine("All players have lost. Ending the game.");
+                return End();
+            }
+            OnChanged?.Invoke();
+            return GameResult.PlayerLost;
+        }
+
+        public GameResult PlayerWon(Player player)
+        {
+            if (!player.State.Equals(PlayerState.Playing)) { Console.WriteLine("Player is not playing."); return GameResult.PlayerNotPlaying; }
+            player.State = PlayerState.Won;
+            Console.WriteLine($"Player {player.Name} has won the game.");
+            
+            return End();
         }
     }
 }

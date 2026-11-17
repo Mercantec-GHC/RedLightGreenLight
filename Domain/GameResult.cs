@@ -1,8 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-
-namespace Domain
+﻿namespace Domain
 {
     public enum GameResult
     {
@@ -14,6 +10,10 @@ namespace Domain
         PlayerNotFound,
         NoPlayers,
         NoHost,
-        PlayersNotReady
+        PlayersNotReady,
+        PlayerNotPlaying,
+        PlayerWon,
+        PlayerLost,
+        AllIsLost
     }
 }

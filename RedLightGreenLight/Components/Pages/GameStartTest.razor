@@ -14,16 +14,40 @@ else
 {
     <br />
     <button class="btn btn-primary" @onclick="AddPlayer">Add Player</button>
-    <button class="btn btn-primary" @onclick="ReadyPlayers">Ready Players</button>
     <button class="btn btn-primary" @onclick="AddHost">Add Host</button>
     <button class="btn btn-warning" @onclick="StartGame">Start Game</button>
     <br />
-    <p>Game State: @game.State</p>
+    <p>
+        Game State:
+        <span class="badge @GetGameStateColor()">
+            @game.State
+        </span>
+    </p>
     <p>Players:</p>
     <ul>
         @foreach (var player in game.Players)
         {
-            <li>@player.Name - @player.State <button class="btn btn-danger" @onclick="() => RemovePlayer(player)">X</button></li>
+            <li>
+                @player.Name - @player.State - 
+                @switch (player.State)
+                {
+                    case PlayerState.Waiting:
+                        <button class="btn btn-primary" @onclick="() => ReadyPlayer(player)">Ready</button>
+                        break;
+                    case PlayerState.Ready:
+                        <button class="btn btn-secondary" @onclick="() => CancelReadyPlayer(player)">Cancel Ready</button>
+                        break;
+                    case PlayerState.Playing:
+                        <button class="btn btn-success" @onclick="() => PlayerMoved(player)">Move</button>
+                        <button class="btn btn-success" @onclick="() => PlayerWon(player)">Declare Winner</button>
+                        break;
+                    case PlayerState.Lost:
+                        <span class="badge bg-danger">Lost</span>
+                        break;
+                }
+
+                <button class="btn btn-danger" @onclick="() => RemovePlayer(player)">X</button>
+            </li>
         }
     </ul>
     <p>Host: @(game.Host != null ? $"Host ID: {game.Host.Id}" : "No host assigned")</p>
@@ -41,17 +65,15 @@ else
     Game? game;
     string message = string.Empty;
 
-
-
     private void JoinGame()
     {
         if (game != null)
         {
-            Console.WriteLine("Already joined a game.");
             message = "Already joined a game.";
             return;
         }
         game = new Game();
+        game.OnChanged += UpdateGame;
         message = "Joined a new game.";
     }
 
@@ -59,11 +81,12 @@ else
     {
         if (game == null)
         {
-            Console.WriteLine("No game to leave.");
             message = "No game to leave.";
             return;
         }
+        game.OnChanged -= UpdateGame;
         game = null;
+
         message = "Left the game.";
     }
 
@@ -71,7 +94,6 @@ else
     {
         if (game == null)
         {
-            Console.WriteLine("No game available. Please join a game first.");
             message = "No game available. Please join a game first.";
             return;
         }
@@ -90,7 +112,6 @@ else
     {
         if (game == null)
         {
-            Console.WriteLine("No game available. Please join a game first.");
             message = "No game available. Please join a game first.";
             return;
         }
@@ -102,28 +123,80 @@ else
         else message = $"Failed to remove player: {result}";
     }
 
-    private void ReadyPlayers()
+    private void ReadyPlayer(Player player)
     {
         if (game == null)
         {
-            Console.WriteLine("No game available. Please join a game first.");
             message = "No game available. Please join a game first.";
             return;
         }
-        if (!game.Players.Any())
+        player.State = PlayerState.Ready;
+    }
+
+    private void CancelReadyPlayer(Player player)
+    {
+        if (game == null)
         {
-            Console.WriteLine("No players available to ready. Please add players first.");
-            message = "No players available to ready. Please add players first.";
+            message = "No game available. Please join a game first.";
             return;
         }
-        game.Players.ForEach(p => p.State = Player.PlayerState.Ready);
+        player.State = PlayerState.Waiting;
+    }
+
+    private void PlayerMoved(Player player)
+    {
+        if (game == null)
+        {
+            message = "No game available. Please join a game first.";
+            return;
+        }
+        GameResult result = game.PlayerMoved(player);
+        switch (result)
+        {
+            case GameResult.Success:
+                message = $"Player moved successfully.";
+                break;
+
+            case GameResult.PlayerLost:
+                message = $"Player {player.Name} has lost the game!";
+                break;
+
+            case GameResult.AllIsLost:
+                message = $"All players have lost the game.";
+                break;
+
+            default:
+                message = $"Failed to move player: {result}";
+                break;
+        }
+    }
+
+    private void PlayerWon(Player player)
+    {
+        if (game == null)
+        {
+            message = "No game available. Please join a game first.";
+            return;
+        }
+        GameResult result = game.PlayerWon(player);
+        switch (result)
+        {
+            case GameResult.PlayerWon:
+                message = $"Player {player.Name} has won the game!";
+                break;
+            case GameResult.PlayerNotPlaying:
+                message = $"Player {player.Name} is not currently playing.";
+                break;
+            default:
+                message = $"Failed to declare player as winner: {result}";
+                break;
+        }
     }
 
     private void AddHost()
     {
         if (game == null)
         {
-            Console.WriteLine("No game available. Please join a game first.");
             message = "No game available. Please join a game first.";
             return;
         }
@@ -138,22 +211,43 @@ else
         }
     }
 
-    private void StartGame()
+    private async Task StartGame()
     {
         if (game == null)
         {
-            Console.WriteLine("No game available. Please join a game first.");
             message = "No game available. Please join a game first.";
             return;
         }
-        GameResult result = game.Start();
-        if (result == GameResult.Success)
+        GameResult result = await game.Start();
+        switch (result)
         {
-            message = "Game started successfully.";
+            case GameResult.PlayerWon:
+                message = $"Player {game.Players.First(p => p.State == PlayerState.Won).Name} has won the game!";
+                break;
+            case GameResult.AllIsLost:
+                message = $"All players have lost the game.";
+                break;
+            default:
+                message = $"Failed to start game: {result}";
+                break;
         }
-        else
+    }
+
+    private string GetGameStateColor()
+    {
+        return game?.State switch
         {
-            message = $"Failed to start game: {result}";
-        }
+            GameState.Waiting => "bg-secondary",
+            GameState.RedLight => "bg-danger",
+            GameState.YellowLight => "bg-warning",
+            GameState.GreenLight => "bg-success",
+            GameState.Finished => "bg-dark",
+            _ => "bg-secondary"
+        };
+    }
+
+    private void UpdateGame()
+    {
+        StateHasChanged();
     }
 }

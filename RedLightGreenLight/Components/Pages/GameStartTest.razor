@@ -1,24 +1,159 @@
 ﻿@using Domain
 
-@page "/start-test"
+@page "/"
 
 <PageTitle>Home</PageTitle>
 
-<h1>Hello, world!</h1>
+<h1>Red Light, Green Light</h1>
 
-Welcome to your new app.
+@if (game == null)
+{
+    <button class="btn btn-primary" @onclick="JoinGame">Join Game</button>
+}
+else
+{
+    <br />
+    <button class="btn btn-primary" @onclick="AddPlayer">Add Player</button>
+    <button class="btn btn-primary" @onclick="ReadyPlayers">Ready Players</button>
+    <button class="btn btn-primary" @onclick="AddHost">Add Host</button>
+    <button class="btn btn-warning" @onclick="StartGame">Start Game</button>
+    <br />
+    <p>Game State: @game.State</p>
+    <p>Players:</p>
+    <ul>
+        @foreach (var player in game.Players)
+        {
+            <li>@player.Name - @player.State <button class="btn btn-danger" @onclick="() => RemovePlayer(player)">X</button></li>
+        }
+    </ul>
+    <p>Host: @(game.Host != null ? $"Host ID: {game.Host.Id}" : "No host assigned")</p>
+    <br />
+    <button class="btn btn-danger" @onclick="LeaveGame">Leave Game</button>
+}
 
-<button @onclick="StartGame">Start Game</button>
-
-
+<br />
+@if (!string.IsNullOrEmpty(message))
+{
+    <p>@message</p>
+}
 
 @code {
     Game? game;
+    string message = string.Empty;
 
+
+
+    private void JoinGame()
+    {
+        if (game != null)
+        {
+            Console.WriteLine("Already joined a game.");
+            message = "Already joined a game.";
+            return;
+        }
+        game = new Game();
+        message = "Joined a new game.";
+    }
+
+    private void LeaveGame()
+    {
+        if (game == null)
+        {
+            Console.WriteLine("No game to leave.");
+            message = "No game to leave.";
+            return;
+        }
+        game = null;
+        message = "Left the game.";
+    }
+
+    private void AddPlayer()
+    {
+        if (game == null)
+        {
+            Console.WriteLine("No game available. Please join a game first.");
+            message = "No game available. Please join a game first.";
+            return;
+        }
+        GameResult result = game.AddPlayer();
+        if (result == GameResult.Success)
+        {
+            message = $"Player added successfully.";
+        }
+        else
+        {
+            message = $"Failed to add player: {result}";
+        }
+    }
+
+    private void RemovePlayer(Player player)
+    {
+        if (game == null)
+        {
+            Console.WriteLine("No game available. Please join a game first.");
+            message = "No game available. Please join a game first.";
+            return;
+        }
+        GameResult result = game.RemovePlayer(player.Id);
+        if (result == GameResult.Success)
+        {
+            message = $"Player removed successfully.";
+        }
+        else message = $"Failed to remove player: {result}";
+    }
+
+    private void ReadyPlayers()
+    {
+        if (game == null)
+        {
+            Console.WriteLine("No game available. Please join a game first.");
+            message = "No game available. Please join a game first.";
+            return;
+        }
+        if (!game.Players.Any())
+        {
+            Console.WriteLine("No players available to ready. Please add players first.");
+            message = "No players available to ready. Please add players first.";
+            return;
+        }
+        game.Players.ForEach(p => p.State = Player.PlayerState.Ready);
+    }
+
+    private void AddHost()
+    {
+        if (game == null)
+        {
+            Console.WriteLine("No game available. Please join a game first.");
+            message = "No game available. Please join a game first.";
+            return;
+        }
+        GameResult result = game.AddHost(1);
+        if (result == GameResult.Success)
+        {
+            message = $"Host added successfully.";
+        }
+        else
+        {
+            message = $"Failed to add host: {result}";
+        }
+    }
 
     private void StartGame()
     {
-        game = new Game();
-        // Logic to start the game
+        if (game == null)
+        {
+            Console.WriteLine("No game available. Please join a game first.");
+            message = "No game available. Please join a game first.";
+            return;
+        }
+        GameResult result = game.Start();
+        if (result == GameResult.Success)
+        {
+            message = "Game started successfully.";
+        }
+        else
+        {
+            message = $"Failed to start game: {result}";
+        }
     }
 }

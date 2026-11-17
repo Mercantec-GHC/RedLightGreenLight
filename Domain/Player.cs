@@ -7,7 +7,7 @@
 
         public Player(string? name, int id)
         {
-            Name = name ?? "Player " + id.ToString();
+            Name = name ?? "Player " + id;
             Id = id;
         }
         public PlayerState State { get; set; } = PlayerState.Joined;

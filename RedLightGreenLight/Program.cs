@@ -10,7 +10,7 @@ namespace RedLightGreenLight
 
             // Add services to the container.
             builder.Services.AddRazorComponents()
-                .AddInteractiveServerComponents();
+                .AddInteractiveServerComponents(o => o.DetailedErrors = true);
 
             var app = builder.Build();
 

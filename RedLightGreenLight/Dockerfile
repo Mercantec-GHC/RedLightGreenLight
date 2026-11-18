@@ -7,7 +7,7 @@ RUN dotnet restore RedLightGreenLight/RedLightGreenLight.csproj
 
 COPY Domain/ Domain/
 COPY RedLightGreenLight/ RedLightGreenLight/
-RUN dotnet publish RedLightGreenLight/RedLightGreenLight.csproj -c Release -o /app/publish --no-restore
+RUN dotnet publish RedLightGreenLight/RedLightGreenLight.csproj -c Release -o /app/publish
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0
 WORKDIR /app

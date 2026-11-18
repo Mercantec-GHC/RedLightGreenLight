@@ -1,0 +1,89 @@
+@page "/websocket-test"
+@inject WebSocketService WebSocketService
+@implements IDisposable
+
+<PageTitle>WebSocket test</PageTitle>
+
+<h1>WebSocket test</h1>
+
+<div class="mb-3">
+    <select class="form-select w-auto d-inline-block" @bind="selectedEvent">
+        @foreach (var gameEvent in Enum.GetValues<GameEvent>())
+        {
+            <option value="@gameEvent">@gameEvent</option>
+        }
+    </select>
+
+    <button class="btn btn-primary" @onclick="SendSignalR">Send SignalR</button>
+    <button class="btn btn-secondary" @onclick="SendMosquitto">Send Mosquitto</button>
+</div>
+
+@if (!string.IsNullOrEmpty(status))
+{
+    <p>@status</p>
+}
+
+<h4>Received via SignalR</h4>
+
+@if (received.Count == 0)
+{
+    <p>Nothing received yet.</p>
+}
+else
+{
+    <ul>
+        @foreach (var webSocketEvent in received)
+        {
+            <li>@webSocketEvent.Date.ToLocalTime().ToString("HH:mm:ss") - @webSocketEvent.Event</li>
+        }
+    </ul>
+}
+
+@code {
+    private readonly List<WebSocketEvent> received = new();
+
+    private GameEvent selectedEvent = GameEvent.GreenLight;
+
+    private string status = string.Empty;
+
+    protected override void OnInitialized()
+    {
+        WebSocketService.OnSignalR += OnSignalR;
+    }
+
+    private Task OnSignalR(WebSocketEvent webSocketEvent)
+    {
+        return InvokeAsync(() =>
+        {
+            received.Insert(0, webSocketEvent);
+
+            StateHasChanged();
+        });
+    }
+
+    private async Task SendSignalR()
+    {
+        await WebSocketService.SendSignalRAsync(new WebSocketEvent(selectedEvent, DateTime.UtcNow));
+
+        status = $"Sent {selectedEvent} via SignalR.";
+    }
+
+    private async Task SendMosquitto()
+    {
+        try
+        {
+            await WebSocketService.SendMosquittoAsync(new WebSocketEvent(selectedEvent, DateTime.UtcNow));
+
+            status = $"Sent {selectedEvent} to Mosquitto.";
+        }
+        catch (Exception ex)
+        {
+            status = $"Failed to send to Mosquitto: {ex.Message}";
+        }
+    }
+
+    public void Dispose()
+    {
+        WebSocketService.OnSignalR -= OnSignalR;
+    }
+}

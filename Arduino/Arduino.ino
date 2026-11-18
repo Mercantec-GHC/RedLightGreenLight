@@ -1,9 +1,12 @@
 #include <Arduino_MKRIoTCarrier.h>
-#include "movementDetectionAccelerometer.h"
-#include "config.h"
+#include <WiFiNINA.h>
+#include <ArduinoMqttClient.h>
+#include <ArduinoJson.h>
+#include "Config.h"
+#include "MovementDetectionAccelerometer.h"
+#include "MqttConnection.h"
 
 MKRIoTCarrier carrier;
-
 
 void setup() {
   Serial.begin(9600);
@@ -32,6 +35,21 @@ void loop() {
     else {
       Serial.println("No movement");
     }
+
+  checkConnectionLost();
+
+  if (!ensureWifi()) return;
+
+  syncTime();
+
+  if (!deviceId.length()) {
+    buildTopics();
+  }
+
+  if (!ensureMqtt()) return;
+
+  mqtt.poll();
+}
 
     // prints all movements for debuggin
     // Serial.print("x ");

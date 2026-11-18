@@ -33,7 +33,7 @@
 
         public GameResult AddHost(int id)
         {
-            if (Host != null) { Console.WriteLine("A host is already assigned to this game."); return GameResult.HostAlreadyAssigned; }
+            if (Host is not null) { Console.WriteLine("A host is already assigned to this game."); return GameResult.HostAlreadyAssigned; }
             Host = new Host(id);
             OnChanged?.Invoke();
             return GameResult.Success;
@@ -49,7 +49,7 @@
         public async Task<GameResult> Start()
         {
             if (!State.Equals(GameState.Waiting)) { Console.WriteLine("Game has already started."); return GameResult.GameAlreadyStarted; }
-            if (Host == null) { Console.WriteLine("Cannot start a game without a host."); return GameResult.NoHost; }
+            if (Host is null) { Console.WriteLine("Cannot start a game without a host."); return GameResult.NoHost; }
             if (!Players.Any()) { Console.WriteLine("Cannot start a game with no players."); return GameResult.NoPlayers; }
             if (Players.Exists(p => p.State != PlayerState.Ready)) { Console.WriteLine("Cannot start a game with players who are not ready."); return GameResult.PlayersNotReady; }
 

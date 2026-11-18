@@ -6,7 +6,7 @@
 
 <h1>Red Light, Green Light</h1>
 
-@if (game == null)
+@if (game is null)
 {
     <button class="btn btn-primary" @onclick="JoinGame">Join Game</button>
 }
@@ -50,7 +50,7 @@ else
             </li>
         }
     </ul>
-    <p>Host: @(game.Host != null ? $"Host ID: {game.Host.Id}" : "No host assigned")</p>
+    <p>Host: @(game.Host is not null ? $"Host ID: {game.Host.Id}" : "No host assigned")</p>
     <br />
     <button class="btn btn-danger" @onclick="LeaveGame">Leave Game</button>
 }
@@ -67,7 +67,7 @@ else
 
     private void JoinGame()
     {
-        if (game != null)
+        if (game is not null)
         {
             message = "Already joined a game.";
             return;
@@ -79,7 +79,7 @@ else
 
     private void LeaveGame()
     {
-        if (game == null)
+        if (game is null)
         {
             message = "No game to leave.";
             return;
@@ -92,7 +92,7 @@ else
 
     private void AddPlayer()
     {
-        if (game == null)
+        if (game is null)
         {
             message = "No game available. Please join a game first.";
             return;
@@ -110,7 +110,7 @@ else
 
     private void RemovePlayer(Player player)
     {
-        if (game == null)
+        if (game is null)
         {
             message = "No game available. Please join a game first.";
             return;
@@ -125,7 +125,7 @@ else
 
     private void ReadyPlayer(Player player)
     {
-        if (game == null)
+        if (game is null)
         {
             message = "No game available. Please join a game first.";
             return;
@@ -135,7 +135,7 @@ else
 
     private void CancelReadyPlayer(Player player)
     {
-        if (game == null)
+        if (game is null)
         {
             message = "No game available. Please join a game first.";
             return;
@@ -145,7 +145,7 @@ else
 
     private void PlayerMoved(Player player)
     {
-        if (game == null)
+        if (game is null)
         {
             message = "No game available. Please join a game first.";
             return;
@@ -173,7 +173,7 @@ else
 
     private void PlayerWon(Player player)
     {
-        if (game == null)
+        if (game is null)
         {
             message = "No game available. Please join a game first.";
             return;
@@ -195,7 +195,7 @@ else
 
     private void AddHost()
     {
-        if (game == null)
+        if (game is null)
         {
             message = "No game available. Please join a game first.";
             return;
@@ -213,7 +213,7 @@ else
 
     private async Task StartGame()
     {
-        if (game == null)
+        if (game is null)
         {
             message = "No game available. Please join a game first.";
             return;

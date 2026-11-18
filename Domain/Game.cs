@@ -62,7 +62,7 @@
         public GameResult End()
         {
             State = GameState.Finished;
-            OnChanged();
+            OnChanged?.Invoke();
 
             if (Players.Any(p => p.State == PlayerState.Won))
             {

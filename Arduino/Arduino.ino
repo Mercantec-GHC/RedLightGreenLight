@@ -1,6 +1,7 @@
 #include <Arduino_MKRIoTCarrier.h>
 #include "movementDetectionAccelerometer.h"
 #include "config.h"
+#include "display.h"
 
 MKRIoTCarrier carrier;
 
@@ -9,10 +10,16 @@ void setup() {
   Serial.begin(9600);
   while (!Serial);
 
+  carrier.begin();
+
   if (!carrier.IMUmodule.begin()) {
     Serial.println("Failed to initialize IMU!");
     while (1);
   }
+
+  showLedAll(carrier, 2);
+  showScreenText(carrier, "Player 1", "has won", "the game", ST77XX_RED);
+  //showLedBlink(carrier, 0, 4, 500);
 }
 
 
@@ -32,6 +39,8 @@ void loop() {
     else {
       Serial.println("No movement");
     }
+
+    
 
     // prints all movements for debuggin
     // Serial.print("x ");

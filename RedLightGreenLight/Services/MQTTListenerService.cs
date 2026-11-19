@@ -17,12 +17,14 @@ namespace RedLightGreenLight.Services
         private readonly string _host;
         private readonly int _port;
         private readonly GameManager _gameManager;
+        private readonly WebSocketService _webSocketService;
 
-        public MQTTListenerService(IConfiguration configuration, GameManager gameManager)
+        public MQTTListenerService(IConfiguration configuration, GameManager gameManager, WebSocketService webSocketService)
         {
             _host = configuration["MQTT:Host"] ?? "localhost";
             _port = configuration.GetValue("MQTT:Port", 1883);
             _gameManager = gameManager;
+            _webSocketService = webSocketService;
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -31,11 +33,9 @@ namespace RedLightGreenLight.Services
 
             using var client = factory.CreateMqttClient();
 
-            client.ApplicationMessageReceivedAsync += e =>
+            client.ApplicationMessageReceivedAsync += async e =>
             {
-                HandleMessage(e.ApplicationMessage.Topic, e.ApplicationMessage.ConvertPayloadToString());
-
-                return Task.CompletedTask;
+                await HandleMessage(e.ApplicationMessage.Topic, e.ApplicationMessage.ConvertPayloadToString());
             };
 
             var options = new MqttClientOptionsBuilder()
@@ -86,7 +86,7 @@ namespace RedLightGreenLight.Services
             }
         }
 
-        private void HandleMessage(string topic, string payload)
+        private async Task HandleMessage(string topic, string payload)
         {
             // Topic format: devices/{deviceId}/{type}
             string[] parts = topic.Split('/');
@@ -101,36 +101,45 @@ namespace RedLightGreenLight.Services
             switch (parts[2])
             {
                 case "status":
-                    HandleStatus(deviceId, payload.Trim());
+                    await HandleStatus(deviceId, payload.Trim());
                     break;
 
                 case "events":
-                    HandleEvent(deviceId, payload);
+                    await HandleEvent(deviceId, payload);
                     break;
             }
         }
 
-        private void HandleStatus(string deviceId, string status)
+        private async Task HandleStatus(string deviceId, string status)
         {
             switch (status)
             {
                 case "online":
-                    // TODO: Call GameManager when a device connects.
+                    _gameManager.AddPlayer(deviceId);
+
                     Console.WriteLine($"Device {deviceId} connected.");
+
+                    await _webSocketService.SendToWebAppAsync(new WebSocketEvent(GameEvent.PlayerJoined, deviceId));
+
                     break;
 
                 case "offline":
-                    // TODO: Call GameManager when a device disconnects.
+                    _gameManager.RemovePlayer(deviceId);
+
                     Console.WriteLine($"Device {deviceId} disconnected.");
+
+                    await _webSocketService.SendToWebAppAsync(new WebSocketEvent(GameEvent.PlayerLeft, deviceId));
+
                     break;
 
                 default:
                     Console.WriteLine($"Device {deviceId} sent unknown status: {status}");
+
                     break;
             }
         }
 
-        private void HandleEvent(string deviceId, string payload)
+        private async Task HandleEvent(string deviceId, string payload)
         {
             WebSocketEvent? webSocketEvent;
 
@@ -153,17 +162,36 @@ namespace RedLightGreenLight.Services
             switch (webSocketEvent.Event)
             {
                 case GameEvent.Goal:
-                    // TODO: Call GameManager to register this device as the goal.
+                    _gameManager.ConvertPlayerToGoal(deviceId);
+
                     Console.WriteLine($"Device {deviceId} registered as the goal.");
+                    
+                    break;
+
+                case GameEvent.PlayerReady:
+                    await _gameManager.MarkPlayerAsReadyAsync(deviceId);
+
+                    Console.WriteLine($"Device {deviceId} is ready at {webSocketEvent.Date:O}");
+
                     break;
 
                 case GameEvent.PlayerMoved:
-                    _gameManager.PlayerMoved(deviceId);
+                    await _gameManager.PlayerMovedAsync(deviceId);
+
+                    Console.WriteLine($"Device {deviceId} moved at {webSocketEvent.Date:O}");
+
+                    break;
+
+                case GameEvent.PlayerEliminated:
+                    await _gameManager.EliminatePlayerAsync(deviceId);
+
+                    Console.WriteLine($"Device {deviceId} eliminated at {webSocketEvent.Date:O}");
+                    
                     break;
 
                 default:
-                    // TODO: Call GameManager with the event.
                     Console.WriteLine($"Device {deviceId} sent {webSocketEvent.Event} at {webSocketEvent.Date:O}");
+
                     break;
             }
         }

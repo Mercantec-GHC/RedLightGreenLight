@@ -14,8 +14,11 @@
         }
     </select>
 
+    <input class="form-control w-auto d-inline-block" placeholder="Device ID" @bind="deviceId" />
+
     <button class="btn btn-primary" @onclick="SendSignalR">Send SignalR</button>
-    <button class="btn btn-secondary" @onclick="SendMosquitto">Send Mosquitto</button>
+    <button class="btn btn-secondary" @onclick="SendToDevice">Send to device</button>
+    <button class="btn btn-warning" @onclick="SendToEveryone">Send to everyone</button>
 </div>
 
 @if (!string.IsNullOrEmpty(status))
@@ -44,6 +47,8 @@ else
 
     private GameEvent selectedEvent = GameEvent.GreenLight;
 
+    private string deviceId = string.Empty;
+
     private string status = string.Empty;
 
     protected override void OnInitialized()
@@ -63,18 +68,39 @@ else
 
     private async Task SendSignalR()
     {
-        await WebSocketService.SendSignalRAsync(new WebSocketEvent(selectedEvent, DateTime.UtcNow));
+        await WebSocketService.SendToWebAppAsync(new WebSocketEvent(selectedEvent, DateTime.UtcNow));
 
         status = $"Sent {selectedEvent} via SignalR.";
     }
 
-    private async Task SendMosquitto()
+    private async Task SendToDevice()
+    {
+        if (string.IsNullOrWhiteSpace(deviceId))
+        {
+            status = "Enter a device ID first.";
+
+            return;
+        }
+
+        try
+        {
+            await WebSocketService.SendToDeviceByIdAsync(deviceId, new WebSocketEvent(selectedEvent, DateTime.UtcNow));
+
+            status = $"Sent {selectedEvent} to device {deviceId}.";
+        }
+        catch (Exception ex)
+        {
+            status = $"Failed to send to Mosquitto: {ex.Message}";
+        }
+    }
+
+    private async Task SendToEveryone()
     {
         try
         {
-            await WebSocketService.SendMosquittoAsync(new WebSocketEvent(selectedEvent, DateTime.UtcNow));
+            await WebSocketService.SendToEveryoneAsync(new WebSocketEvent(selectedEvent, DateTime.UtcNow));
 
-            status = $"Sent {selectedEvent} to Mosquitto.";
+            status = $"Sent {selectedEvent} to everyone.";
         }
         catch (Exception ex)
         {

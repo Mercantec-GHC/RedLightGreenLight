@@ -4,7 +4,8 @@
 #include <WiFiNINA.h>
 #include <ArduinoMqttClient.h>
 #include <ArduinoJson.h>
-
+#include <time.h>
+#include "Helpers.h"
 #include "Config.h"
 
 
@@ -17,7 +18,7 @@ MqttClient mqtt(wifiClient);
 String deviceId = "";
 
 String eventTopic = "";
-String commandTopic = "";
+String statusTopic = "";
 
 
 // Connection state
@@ -71,9 +72,7 @@ bool ensureWifi() {
   unsigned long currentTime = millis();
 
   if (
-    !wifiAttempted ||
-    currentTime - lastWifiAttempt >= WIFI_RECONNECT_INTERVAL_MS
-  ) {
+    !wifiAttempted || currentTime - lastWifiAttempt >= WIFI_RECONNECT_INTERVAL_MS) {
 
     Serial.println("Connecting to WiFi...");
 
@@ -105,16 +104,12 @@ void buildTopics() {
     mac[2],
     mac[3],
     mac[4],
-    mac[5]
-  );
+    mac[5]);
 
   deviceId = "mkr-" + String(macAddress);
 
-  eventTopic = String(MQTT_TOPIC_PREFIX) + "/" +
-               deviceId + "/events";
-
-  commandTopic = String(MQTT_TOPIC_PREFIX) + "/" +
-                 deviceId + "/commands";
+  eventTopic = String(MQTT_TOPIC_PREFIX) + "/" + deviceId + "/events";
+  statusTopic = String(MQTT_TOPIC_PREFIX) + "/" + deviceId + "/status";
 
   // Set MQTT client ID
   mqtt.setId(deviceId);
@@ -125,8 +120,8 @@ void buildTopics() {
   Serial.println("Event topic:");
   Serial.println(eventTopic);
 
-  Serial.println("Command topic:");
-  Serial.println(commandTopic);
+  Serial.println("Status topic:");
+  Serial.println(statusTopic);
 }
 
 
@@ -154,9 +149,7 @@ bool ensureMqtt() {
   unsigned long currentTime = millis();
 
   if (
-    mqttAttempted &&
-    currentTime - lastMqttAttempt < MQTT_RECONNECT_INTERVAL_MS
-  ) {
+    mqttAttempted && currentTime - lastMqttAttempt < MQTT_RECONNECT_INTERVAL_MS) {
     return false;
   }
 
@@ -165,23 +158,24 @@ bool ensureMqtt() {
   mqttAttempted = true;
   lastMqttAttempt = currentTime;
 
-  // Configure authentication if provided
-  if (MQTT_USER[0] != '\0') {
+  mqtt.setKeepAliveInterval(5 * 1000);  // ms, how often the broker expects a sign of life
 
-    mqtt.setUsernamePassword(
-      MQTT_USER,
-      MQTT_PASS
-    );
-  }
+  mqtt.beginWill(statusTopic, true, 1);  // topic, retain, QoS
+  mqtt.print("offline");
+  mqtt.endWill();
 
   if (mqtt.connect(MQTT_HOST, MQTT_PORT)) {
 
     Serial.println("MQTT connected!");
 
     // Subscribe to commands from backend
-    mqtt.subscribe(commandTopic.c_str());
+    mqtt.subscribe(eventTopic.c_str());
 
-    Serial.println("Subscribed to command topic");
+    Serial.println("Subscribed to event topic");
+
+    mqtt.beginMessage(statusTopic, true, 1);
+    mqtt.print("online");
+    mqtt.endMessage();
 
     return true;
   }
@@ -205,16 +199,14 @@ bool publishEvent(const char* eventName) {
   StaticJsonDocument<192> document;
 
   document["event"] = eventName;
-  document["deviceId"] = deviceId;
-  document["player"] = PLAYER_NAME;
+  document["date"] = getUTCTimestamp();
 
   char payload[192];
 
   size_t payloadSize = serializeJson(
     document,
     payload,
-    sizeof(payload)
-  );
+    sizeof(payload));
 
   if (payloadSize == 0) {
     return false;
@@ -225,8 +217,7 @@ bool publishEvent(const char* eventName) {
 
   mqtt.write(
     (const uint8_t*)payload,
-    payloadSize
-  );
+    payloadSize);
 
   bool success = mqtt.endMessage();
 
@@ -238,6 +229,7 @@ bool publishEvent(const char* eventName) {
 
   return success;
 }
+
 
 
 // Main MQTT connection handler

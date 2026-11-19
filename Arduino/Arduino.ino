@@ -36,7 +36,7 @@ void loop() {
 
     if (readMotion(x, y, z)) {
       Serial.println("Moved during red light!");
-       publishEvent("movement_detected");
+       publishEvent("PlayerEliminated");
     }
     // else {
     //   Serial.println("No movement");

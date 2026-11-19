@@ -3,7 +3,7 @@ namespace Domain
     public enum GameEvent
     {
         GameStarted,
-        GameEnded,
+        GameOver,
         GreenLight,
         YellowLight,
         RedLight,

@@ -8,6 +8,7 @@ builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents(o => o.DetailedErrors = true);
 
 builder.Services.AddSingleton<WebSocketService>();
+builder.Services.AddSingleton<GameManager>();
 builder.Services.AddHostedService<MQTTListenerService>();
 
 var app = builder.Build();

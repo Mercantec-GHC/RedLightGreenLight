@@ -3,7 +3,7 @@
     public class Game
     {
         public List<Player> Players { get; private set; } = new List<Player>();
-        public Host? Host { get; set; }
+        public Goal? Host { get; set; }
         public int MaxPlayers { get; private set; } = 5;
         public int NextPlayerId = 1; // To assign unique IDs to players
 
@@ -22,36 +22,36 @@
             TimeBetweenStops = timeBetweenStops;
         }
         
-        public GameResult AddPlayer(string? name = null)
+        public MethodResult AddPlayer(string? name = null)
         {
-            if (!State.Equals(GameState.Waiting)) { Console.WriteLine("Cannot join a game that has already started."); return GameResult.GameAlreadyStarted; }
-            if (Players.Count >= MaxPlayers) { Console.WriteLine("Maximum number of players reached."); return GameResult.MaxPlayersReached; }
-            Players.Add(new Player(name, NextPlayerId++));
+            if (!State.Equals(GameState.Waiting)) { Console.WriteLine("Cannot join a game that has already started."); return MethodResult.GameAlreadyStarted; }
+            if (Players.Count >= MaxPlayers) { Console.WriteLine("Maximum number of players reached."); return MethodResult.MaxPlayersReached; }
+            Players.Add(new Player(name, NextPlayerId++.ToString()));
             OnChanged?.Invoke();
-            return GameResult.Success;
+            return MethodResult.Success;
         }
 
-        public GameResult AddHost(int id)
+        public MethodResult AddHost(string id)
         {
-            if (Host is not null) { Console.WriteLine("A host is already assigned to this game."); return GameResult.HostAlreadyAssigned; }
-            Host = new Host(id);
+            if (Host is not null) { Console.WriteLine("A host is already assigned to this game."); return MethodResult.HostAlreadyAssigned; }
+            Host = new Goal(id);
             OnChanged?.Invoke();
-            return GameResult.Success;
+            return MethodResult.Success;
         }
-        public GameResult RemovePlayer(int id)
+        public MethodResult RemovePlayer(string id)
         {
-            if (!Players.Exists(p => p.Id == id)) { Console.WriteLine("Player not found."); return GameResult.PlayerNotFound; }
+            if (!Players.Exists(p => p.Id == id)) { Console.WriteLine("Player not found."); return MethodResult.PlayerNotFound; }
             Players.RemoveAll(p => p.Id == id);
             OnChanged?.Invoke();
-            return GameResult.Success;
+            return MethodResult.Success;
         }
 
-        public async Task<GameResult> Start()
+        public async Task<MethodResult> Start()
         {
-            if (!State.Equals(GameState.Waiting)) { Console.WriteLine("Game has already started."); return GameResult.GameAlreadyStarted; }
-            if (Host is null) { Console.WriteLine("Cannot start a game without a host."); return GameResult.NoHost; }
-            if (!Players.Any()) { Console.WriteLine("Cannot start a game with no players."); return GameResult.NoPlayers; }
-            if (Players.Exists(p => p.State != PlayerState.Ready)) { Console.WriteLine("Cannot start a game with players who are not ready."); return GameResult.PlayersNotReady; }
+            if (!State.Equals(GameState.Waiting)) { Console.WriteLine("Game has already started."); return MethodResult.GameAlreadyStarted; }
+            if (Host is null) { Console.WriteLine("Cannot start a game without a host."); return MethodResult.NoHost; }
+            if (!Players.Any()) { Console.WriteLine("Cannot start a game with no players."); return MethodResult.NoPlayers; }
+            if (Players.Exists(p => p.State != PlayerState.Ready)) { Console.WriteLine("Cannot start a game with players who are not ready."); return MethodResult.PlayersNotReady; }
 
             Players.ForEach(p => p.State = PlayerState.Playing);
 
@@ -59,7 +59,7 @@
             await Loop();
             return End();
         }
-        public GameResult End()
+        public MethodResult End()
         {
             State = GameState.Finished;
             OnChanged?.Invoke();
@@ -68,12 +68,12 @@
             {
                 var winner = Players.First(p => p.State == PlayerState.Won);
                 Console.WriteLine($"Player {winner.Name} has won the game!");
-                return GameResult.PlayerWon;
+                return MethodResult.PlayerWon;
             }
             else
             {
                 Console.WriteLine("No players won the game.");
-                return GameResult.AllIsLost;
+                return MethodResult.GameOver;
             }
         }
 
@@ -107,10 +107,10 @@
             }
         }
 
-        public GameResult PlayerMoved(Player player)
+        public MethodResult PlayerMoved(Player player)
         {
-            if (State != GameState.RedLight) return GameResult.Success;
-            if (!player.State.Equals(PlayerState.Playing)) { Console.WriteLine("Player is not playing."); return GameResult.PlayerNotPlaying; }
+            if (State != GameState.RedLight) return MethodResult.Success;
+            if (!player.State.Equals(PlayerState.Playing)) { Console.WriteLine("Player is not playing."); return MethodResult.PlayerNotPlaying; }
 
             player.State = PlayerState.Lost;
             Console.WriteLine($"Player {player.Name} has lost the game for moving during Red Light.");
@@ -121,12 +121,12 @@
                 return End();
             }
             OnChanged?.Invoke();
-            return GameResult.PlayerLost;
+            return MethodResult.PlayerLost;
         }
 
-        public GameResult PlayerWon(Player player)
+        public MethodResult PlayerWon(Player player)
         {
-            if (!player.State.Equals(PlayerState.Playing)) { Console.WriteLine("Player is not playing."); return GameResult.PlayerNotPlaying; }
+            if (!player.State.Equals(PlayerState.Playing)) { Console.WriteLine("Player is not playing."); return MethodResult.PlayerNotPlaying; }
             player.State = PlayerState.Won;
             Console.WriteLine($"Player {player.Name} has won the game.");
             

@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Domain
 {
     public class WebSocketEvent
@@ -6,9 +8,9 @@ namespace Domain
         public DateTime Date { get; }
         public object? Data { get; }
 
-        public WebSocketEvent(GameEvent _event, object? data = null)
+        public WebSocketEvent(GameEvent @event, object? data = null)
         {
-            Event = _event;
+            Event = @event;
             Date = DateTime.UtcNow;
             Data = data;
         }

@@ -97,8 +97,8 @@ else
             message = "No game available. Please join a game first.";
             return;
         }
-        GameResult result = game.AddPlayer();
-        if (result == GameResult.Success)
+        MethodResult result = game.AddPlayer();
+        if (result == MethodResult.Success)
         {
             message = $"Player added successfully.";
         }
@@ -115,8 +115,8 @@ else
             message = "No game available. Please join a game first.";
             return;
         }
-        GameResult result = game.RemovePlayer(player.Id);
-        if (result == GameResult.Success)
+        MethodResult result = game.RemovePlayer(player.Id);
+        if (result == MethodResult.Success)
         {
             message = $"Player removed successfully.";
         }
@@ -150,18 +150,18 @@ else
             message = "No game available. Please join a game first.";
             return;
         }
-        GameResult result = game.PlayerMoved(player);
+        MethodResult result = game.PlayerMoved(player);
         switch (result)
         {
-            case GameResult.Success:
+            case MethodResult.Success:
                 message = $"Player moved successfully.";
                 break;
 
-            case GameResult.PlayerLost:
+            case MethodResult.PlayerLost:
                 message = $"Player {player.Name} has lost the game!";
                 break;
 
-            case GameResult.AllIsLost:
+            case MethodResult.GameOver:
                 message = $"All players have lost the game.";
                 break;
 
@@ -178,13 +178,13 @@ else
             message = "No game available. Please join a game first.";
             return;
         }
-        GameResult result = game.PlayerWon(player);
+        MethodResult result = game.PlayerWon(player);
         switch (result)
         {
-            case GameResult.PlayerWon:
+            case MethodResult.PlayerWon:
                 message = $"Player {player.Name} has won the game!";
                 break;
-            case GameResult.PlayerNotPlaying:
+            case MethodResult.PlayerNotPlaying:
                 message = $"Player {player.Name} is not currently playing.";
                 break;
             default:
@@ -200,8 +200,8 @@ else
             message = "No game available. Please join a game first.";
             return;
         }
-        GameResult result = game.AddHost(1);
-        if (result == GameResult.Success)
+        MethodResult result = game.AddHost("1");
+        if (result == MethodResult.Success)
         {
             message = $"Host added successfully.";
         }
@@ -218,13 +218,13 @@ else
             message = "No game available. Please join a game first.";
             return;
         }
-        GameResult result = await game.Start();
+        MethodResult result = await game.Start();
         switch (result)
         {
-            case GameResult.PlayerWon:
+            case MethodResult.PlayerWon:
                 message = $"Player {game.Players.First(p => p.State == PlayerState.Won).Name} has won the game!";
                 break;
-            case GameResult.AllIsLost:
+            case MethodResult.GameOver:
                 message = $"All players have lost the game.";
                 break;
             default:

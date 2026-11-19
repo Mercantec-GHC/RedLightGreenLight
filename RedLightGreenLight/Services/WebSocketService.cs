@@ -70,6 +70,12 @@ namespace RedLightGreenLight.Services
             }
         }
 
+        public async Task SendToAllAsync(WebSocketEvent webSocketEvent)
+        {
+            await SendMosquittoAsync(webSocketEvent);
+            await SendSignalRAsync(webSocketEvent);
+        }
+
         private async Task EnsureConnected()
         {
             if (_mqttClient.IsConnected)

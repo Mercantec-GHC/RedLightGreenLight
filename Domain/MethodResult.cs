@@ -1,6 +1,6 @@
 ﻿namespace Domain
 {
-    public enum GameResult
+    public enum MethodResult
     {
         Success,
         NoGameAvailable,
@@ -14,6 +14,6 @@
         PlayerNotPlaying,
         PlayerWon,
         PlayerLost,
-        AllIsLost
+        GameOver
     }
 }

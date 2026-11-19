@@ -16,11 +16,13 @@ namespace RedLightGreenLight.Services
 
         private readonly string _host;
         private readonly int _port;
+        private readonly GameManager _gameManager;
 
-        public MQTTListenerService(IConfiguration configuration)
+        public MQTTListenerService(IConfiguration configuration, GameManager gameManager)
         {
             _host = configuration["MQTT:Host"] ?? "localhost";
             _port = configuration.GetValue("MQTT:Port", 1883);
+            _gameManager = gameManager;
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -84,7 +86,7 @@ namespace RedLightGreenLight.Services
             }
         }
 
-        private static void HandleMessage(string topic, string payload)
+        private void HandleMessage(string topic, string payload)
         {
             // Topic format: devices/{deviceId}/{type}
             string[] parts = topic.Split('/');
@@ -108,7 +110,7 @@ namespace RedLightGreenLight.Services
             }
         }
 
-        private static void HandleStatus(string deviceId, string status)
+        private void HandleStatus(string deviceId, string status)
         {
             switch (status)
             {
@@ -128,7 +130,7 @@ namespace RedLightGreenLight.Services
             }
         }
 
-        private static void HandleEvent(string deviceId, string payload)
+        private void HandleEvent(string deviceId, string payload)
         {
             WebSocketEvent? webSocketEvent;
 
@@ -153,6 +155,10 @@ namespace RedLightGreenLight.Services
                 case GameEvent.Goal:
                     // TODO: Call GameManager to register this device as the goal.
                     Console.WriteLine($"Device {deviceId} registered as the goal.");
+                    break;
+
+                case GameEvent.PlayerMoved:
+                    _gameManager.PlayerMoved(deviceId);
                     break;
 
                 default:

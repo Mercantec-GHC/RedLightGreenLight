@@ -200,7 +200,7 @@ else
             message = "No game available. Please join a game first.";
             return;
         }
-        MethodResult result = game.AddHost(1);
+        MethodResult result = game.AddHost("1");
         if (result == MethodResult.Success)
         {
             message = $"Host added successfully.";

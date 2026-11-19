@@ -11,6 +11,7 @@ namespace Domain
         PlayerLeft,
         PlayerIsGoal,
         PlayerReady,
+        PlayerWaiting,
         PlayerMoved,
         PlayerEliminated,
         PlayerWon,

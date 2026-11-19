@@ -17,10 +17,6 @@ namespace RedLightGreenLight.Services
         private readonly SemaphoreSlim _connectLock = new(1, 1);
         private const string BroadcastTopic = "device/all/events";
 
-        /// <summary>
-        /// Blazor components subscribe to this and call InvokeAsync(StateHasChanged),
-        /// which pushes the update to the browser over the existing SignalR circuit.
-        /// </summary>
         public event Func<WebSocketEvent, Task>? OnSignalR;
 
         public WebSocketService(IConfiguration configuration)
@@ -36,17 +32,11 @@ namespace RedLightGreenLight.Services
                 .Build();
         }
 
-        /// <summary>
-        /// Sends the event to a single Arduino on "device/{deviceId}/events".
-        /// </summary>
         public Task SendToDeviceByIdAsync(string deviceId, WebSocketEvent webSocketEvent)
         {
             return PublishAsync($"device/{deviceId}/events", webSocketEvent);
         }
 
-        /// <summary>
-        /// Sends the event to all Arduinos on "device/all/events" and to all Blazor clients.
-        /// </summary>
         public async Task SendToEveryoneAsync(WebSocketEvent webSocketEvent)
         {
             await PublishAsync(BroadcastTopic, webSocketEvent);

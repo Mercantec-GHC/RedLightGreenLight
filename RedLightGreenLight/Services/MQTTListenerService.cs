@@ -4,11 +4,6 @@ using MQTTnet;
 
 namespace RedLightGreenLight.Services
 {
-    /// <summary>
-    /// A background service that listens for messages from the devices on the Mosquitto broker.
-    /// Devices publish game events to "devices/{deviceId}/events" and their connection status
-    /// ("online"/"offline", with "offline" set as Last Will) to "devices/{deviceId}/status".
-    /// </summary>
     public class MQTTListenerService : BackgroundService
     {
         private const string EventsTopic = "devices/+/events";
@@ -143,6 +138,8 @@ namespace RedLightGreenLight.Services
         {
             WebSocketEvent? webSocketEvent;
 
+            Console.WriteLine($"Attempting to deserialize WebSocket event from device {deviceId} with payload: {payload}");
+
             try
             {
                 webSocketEvent = JsonSerializer.Deserialize<WebSocketEvent>(payload, WebSocketService.JsonOptions);
@@ -156,13 +153,15 @@ namespace RedLightGreenLight.Services
 
             if (webSocketEvent is null)
             {
+                Console.WriteLine($"Couldn't deserialize WebSocket event from device {deviceId} with payload: {payload}");
+
                 return;
             }
 
             switch (webSocketEvent.Event)
             {
                 case GameEvent.Goal:
-                    _gameManager.ConvertPlayerToGoal(deviceId);
+                    await _gameManager.ConvertPlayerToGoalAsync(deviceId);
 
                     Console.WriteLine($"Device {deviceId} registered as the goal.");
                     
@@ -173,6 +172,13 @@ namespace RedLightGreenLight.Services
 
                     Console.WriteLine($"Device {deviceId} is ready at {webSocketEvent.Date:O}");
 
+                    break;
+
+                case GameEvent.PlayerWaiting:
+                    await _gameManager.MarkPlayerAsWaitingAsync(deviceId);
+
+                    Console.WriteLine($"Device {deviceId} is waiting at {webSocketEvent.Date:O}");
+                    
                     break;
 
                 case GameEvent.PlayerMoved:

@@ -10,7 +10,7 @@ namespace RedLightGreenLight.Services
         public int MaxPlayers { get; private set; } = 5;
         public GameDifficulty Difficulty { get; set; } = GameDifficulty.Easy;
 
-        public GameState State { get; private set; } = GameState.Waiting;
+        public GameState State { get; set; } = GameState.Waiting;
         public int TimeLimit { get; set; } // in seconds
         public int TimeBetweenStops { get; set; } // in seconds
 
@@ -42,7 +42,7 @@ namespace RedLightGreenLight.Services
             Players.Add(new Player(id));
         }
 
-        public void ConvertPlayerToGoal(string id)
+        public async Task ConvertPlayerToGoalAsync(string id)
         {
             var player = Players.FirstOrDefault(p => p.Id == id);
 
@@ -57,7 +57,9 @@ namespace RedLightGreenLight.Services
 
             Goal = new Goal(id);
 
-            _webSocketService.SendToDeviceByIdAsync(id, new WebSocketEvent(GameEvent.PlayerIsGoal));
+            await _webSocketService.SendToDeviceByIdAsync(id, new WebSocketEvent(GameEvent.PlayerIsGoal));
+
+            await _webSocketService.SendToWebAppAsync(new WebSocketEvent(GameEvent.PlayerIsGoal, id));
         }
 
         public async Task MarkPlayerAsReadyAsync(string playerId)
@@ -73,12 +75,30 @@ namespace RedLightGreenLight.Services
          
             player.State = PlayerState.Ready;
 
+            await _webSocketService.SendToWebAppAsync(new WebSocketEvent(GameEvent.PlayerReady, playerId));
+
             if (Players.All(p => p.State == PlayerState.Ready))
             {
                 Console.WriteLine("All players are ready. Starting the game...");
              
                 await StartGameAsync();
             }
+        }
+
+        public async Task MarkPlayerAsWaitingAsync(string playerId)
+        {
+            var player = Players.FirstOrDefault(p => p.Id == playerId);
+
+            if (player is null)
+            {
+                Console.WriteLine("Player not found.");
+
+                return;
+            }
+
+            player.State = PlayerState.Waiting;
+
+            await _webSocketService.SendToWebAppAsync(new WebSocketEvent(GameEvent.PlayerWaiting, playerId));
         }
 
         public void RemovePlayer(string playerId)
@@ -218,6 +238,8 @@ namespace RedLightGreenLight.Services
             }
 
             await _webSocketService.SendToDeviceByIdAsync(playerId, new WebSocketEvent(GameEvent.PlayerEliminated));
+
+            await _webSocketService.SendToWebAppAsync(new WebSocketEvent(GameEvent.PlayerEliminated, playerId));
         }
 
         public async Task PlayerWon(string playerId)
@@ -244,5 +266,18 @@ namespace RedLightGreenLight.Services
         }
 
         #endregion
+
+        public void Reset()
+        {
+            Players.Clear();
+            Goal = null;
+
+            MaxPlayers = 5;
+            Difficulty = GameDifficulty.Easy;
+
+            State = GameState.Waiting;
+            TimeLimit = 0;
+            TimeBetweenStops = 0;
+        }
     }
 }

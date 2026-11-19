@@ -15,7 +15,7 @@ namespace RedLightGreenLight.Services
         private readonly IMqttClient _mqttClient;
         private readonly MqttClientOptions _mqttOptions;
         private readonly SemaphoreSlim _connectLock = new(1, 1);
-        private readonly string _topic = "game/events";
+        private const string BroadcastTopic = "device/all/events";
 
         /// <summary>
         /// Blazor components subscribe to this and call InvokeAsync(StateHasChanged),
@@ -36,19 +36,25 @@ namespace RedLightGreenLight.Services
                 .Build();
         }
 
-        public async Task SendMosquittoAsync(WebSocketEvent webSocketEvent)
+        /// <summary>
+        /// Sends the event to a single Arduino on "device/{deviceId}/events".
+        /// </summary>
+        public Task SendToDeviceByIdAsync(string deviceId, WebSocketEvent webSocketEvent)
         {
-            await EnsureConnected();
-
-            var message = new MqttApplicationMessageBuilder()
-                .WithTopic(_topic)
-                .WithPayload(JsonSerializer.Serialize(webSocketEvent, JsonOptions))
-                .Build();
-
-            await _mqttClient.PublishAsync(message);
+            return PublishAsync($"device/{deviceId}/events", webSocketEvent);
         }
 
-        public async Task SendSignalRAsync(WebSocketEvent webSocketEvent)
+        /// <summary>
+        /// Sends the event to all Arduinos on "device/all/events" and to all Blazor clients.
+        /// </summary>
+        public async Task SendToEveryoneAsync(WebSocketEvent webSocketEvent)
+        {
+            await PublishAsync(BroadcastTopic, webSocketEvent);
+
+            await SendToWebAppAsync(webSocketEvent);
+        }
+
+        public async Task SendToWebAppAsync(WebSocketEvent webSocketEvent)
         {
             var handlers = OnSignalR;
 
@@ -70,10 +76,16 @@ namespace RedLightGreenLight.Services
             }
         }
 
-        public async Task SendToAllAsync(WebSocketEvent webSocketEvent)
+        private async Task PublishAsync(string topic, WebSocketEvent webSocketEvent)
         {
-            await SendMosquittoAsync(webSocketEvent);
-            await SendSignalRAsync(webSocketEvent);
+            await EnsureConnected();
+
+            var message = new MqttApplicationMessageBuilder()
+                .WithTopic(topic)
+                .WithPayload(JsonSerializer.Serialize(webSocketEvent, JsonOptions))
+                .Build();
+
+            await _mqttClient.PublishAsync(message);
         }
 
         private async Task EnsureConnected()

@@ -9,6 +9,8 @@ namespace Domain
         RedLight,
         PlayerJoined,
         PlayerLeft,
+        PlayerIsGoal,
+        PlayerReady,
         PlayerMoved,
         PlayerEliminated,
         PlayerWon,

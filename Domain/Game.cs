@@ -26,7 +26,7 @@
         {
             if (!State.Equals(GameState.Waiting)) { Console.WriteLine("Cannot join a game that has already started."); return MethodResult.GameAlreadyStarted; }
             if (Players.Count >= MaxPlayers) { Console.WriteLine("Maximum number of players reached."); return MethodResult.MaxPlayersReached; }
-            Players.Add(new Player(name, NextPlayerId++.ToString()));
+            Players.Add(new Player(NextPlayerId++.ToString()));
             OnChanged?.Invoke();
             return MethodResult.Success;
         }

@@ -4,7 +4,7 @@
 #include <ArduinoJson.h>
 #include "Config.h"
 #include "MovementDetectionAccelerometer.h"
-#include "MqttConnection.h"
+#include "MqttConnection.h" 
 
 MKRIoTCarrier carrier;
 
@@ -16,6 +16,8 @@ void setup() {
     Serial.println("Failed to initialize IMU!");
     while (1);
   }
+
+  beginMqttConnection();
 }
 
 
@@ -24,6 +26,9 @@ void setup() {
 // left & right = x
 // up and down = z
 void loop() {
+
+  mqttConnectionLoop();
+
   float x, y, z;
 
   if (carrier.IMUmodule.accelerationAvailable()) {
@@ -31,25 +36,28 @@ void loop() {
 
     if (readMotion(x, y, z)) {
       Serial.println("Moved during red light!");
+       publishEvent("movement_detected");
     }
-    else {
-      Serial.println("No movement");
-    }
+    // else {
+    //   Serial.println("No movement");
+    // }
 
-  checkConnectionLost();
+  // Check connection
+checkConnectionLost();
 
-  if (!ensureWifi()) return;
+// Connect WiFi
+if (!ensureWifi()) return;
 
-  syncTime();
-
-  if (!deviceId.length()) {
-    buildTopics();
-  }
-
-  if (!ensureMqtt()) return;
-
-  mqtt.poll();
+// Generate device ID and MQTT topics
+if (!deviceId.length()) {
+  buildTopics();
 }
+
+// Connect MQTT
+if (!ensureMqtt()) return;
+
+// Process MQTT messages
+mqtt.poll();
 
     // prints all movements for debuggin
     // Serial.print("x ");

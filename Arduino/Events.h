@@ -1,7 +1,7 @@
 
 if (!strcmp(event, "GameStarted")) {
 
-}else if(!strcmp(event, "GameEnded")){
+}else if(!strcmp(event, "GameOver")){
   
 }else if (!strcmp(event, "PlayerWon")){
 
@@ -13,8 +13,8 @@ if (!strcmp(event, "GameStarted")) {
 
 }else if (!strcmp(event, "PlayerEliminated")){
 
-}else if (!strcmp(event, "")){
+}else if (!strcmp(event, "PlayerReady")){ // this and all below = send NOT listen  
 
-}else if (!strcmp(event, "")){
+}else if (!strcmp(event, "PlayerMoved")){
 
-}else if (!strcmp(event, "")){
+}else if (!strcmp(event, "PlayerEliminated ")){

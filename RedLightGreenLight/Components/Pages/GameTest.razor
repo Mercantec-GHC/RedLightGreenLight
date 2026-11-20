@@ -1,0 +1,222 @@
+﻿@inherits BasePage
+
+@inject GameManager gameManager
+
+@page "/test/game"
+
+<PageTitle>Game Test</PageTitle>
+
+<div class="container py-4" style="max-width: 900px;">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+        <h1 class="m-0">🚦 Red Light, Green Light</h1>
+
+        <span class="badge fs-5 px-3 py-2 @GetGameStateColor()">
+            @gameManager.State
+        </span>
+    </div>
+
+    <div class="card shadow-sm mb-4">
+        <div class="card-body d-flex flex-wrap justify-content-between align-items-center gap-3">
+            <div>
+                <div class="text-muted small">Goal</div>
+
+                @if (gameManager.Goal is not null)
+                {
+                    <div class="fw-semibold">🏁 @gameManager.Goal.Id</div>
+                }
+                else
+                {
+                    <div class="fst-italic text-muted">No goal assigned</div>
+                }
+            </div>
+
+            <div class="d-flex flex-wrap gap-2 text-nowrap">
+                @if (gameManager.Players.Count() < gameManager.MaxPlayers)
+                {
+                    <button class="btn btn-outline-primary" @onclick="AddPlayer">+ Add Player</button>
+                }
+
+                @if (gameManager.IsGameStarted())
+                {
+                    <button class="btn btn-outline-danger" @onclick="ForceStopGameAsync">Force Stop Game</button>
+                }
+                else
+                {
+                    <button class="btn btn-warning" @onclick="ForceStartGameAsync">▶ Force Start Game</button>
+                }
+
+                <button class="btn btn-outline-secondary" @onclick="Reset">↺ Reset Game</button>
+            </div>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(message))
+    {
+        <div class="alert alert-info d-flex justify-content-between align-items-center gap-3 py-2" role="alert">
+            <span>@message</span>
+            <button type="button" class="btn-close flex-shrink-0" style="font-size: 0.65rem;" @onclick="() => message = string.Empty"></button>
+        </div>
+    }
+
+    <div class="card shadow-sm">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span class="fw-semibold">Players</span>
+            <span class="badge bg-secondary rounded-pill">@gameManager.Players.Count()</span>
+        </div>
+
+        @if (!gameManager.Players.Any())
+        {
+            <div class="card-body text-center text-muted fst-italic">
+                No players yet. Click "Add Player" to get started.
+            </div>
+        }
+        else
+        {
+            <ul class="list-group list-group-flush">
+                @foreach (var player in gameManager.Players)
+                {
+                    <li class="list-group-item d-flex flex-wrap justify-content-between align-items-center gap-2">
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="fw-semibold">@player.Name</span>
+                            <span class="badge @GetPlayerStateColor(player.State)">@player.State</span>
+                        </div>
+
+                        <div class="d-flex gap-2 align-items-center">
+                            @if (gameManager.Goal is null)
+                            {
+                                <button class="btn btn-sm btn-outline-info" @onclick="() => ConvertPlayerToGoalAsync(player)">Make Goal</button>
+                            }
+
+                            @switch (player.State)
+                            {
+                                case PlayerState.Waiting:
+                                    <button class="btn btn-sm btn-primary" @onclick="() => MarkPlayerAsReadyAsync(player)">Ready</button>
+                                    break;
+                                case PlayerState.Ready:
+                                    <button class="btn btn-sm btn-secondary" @onclick="() => MarkPlayerAsWaitingAsync(player)">Cancel Ready</button>
+                                    break;
+                                case PlayerState.Playing:
+                                    <button class="btn btn-sm btn-outline-danger" @onclick="() => EliminatePlayerAsync(player)">Eliminate</button>
+                                    <button class="btn btn-sm btn-success" @onclick="() => DeclareWinnerAsync(player)">Declare Winner</button>
+                                    break;
+                            }
+
+                            <button class="btn btn-sm btn-outline-danger" title="Remove player" @onclick="() => RemovePlayer(player)">✕</button>
+                        </div>
+                    </li>
+                }
+            </ul>
+        }
+    </div>
+</div>
+
+@code {
+    string message = string.Empty;
+
+    #region Player Management
+
+    private void AddPlayer()
+    {
+        gameManager.AddPlayer(GenerateDeviceId());
+
+        message = $"Player added successfully.";
+    }
+
+    private void RemovePlayer(Player player)
+    {
+        gameManager.RemovePlayer(player.Id);
+
+        message = $"Player removed successfully.";
+    }
+
+    private async Task ConvertPlayerToGoalAsync(Player player)
+    {
+        await gameManager.ConvertPlayerToGoalAsync(player.Id);
+
+        message = $"Player {player.Name} is now the goal.";
+    }
+
+    private async Task MarkPlayerAsReadyAsync(Player player)
+    {
+        await gameManager.MarkPlayerAsReadyAsync(player.Id);
+
+        message = $"Player {player.Name} is now ready.";
+    }
+
+    private async Task MarkPlayerAsWaitingAsync(Player player)
+    {
+        await gameManager.MarkPlayerAsWaitingAsync(player.Id);
+
+        message = $"Player {player.Name} is now waiting.";
+    }
+
+    #endregion
+
+    #region Game Management and Actions
+
+    private async Task EliminatePlayerAsync(Player player)
+    {
+        await gameManager.EliminatePlayerAsync(player.Id);
+
+        message = $"Player {player.Name} has been eliminated.";
+    }
+
+    private async Task ForceStopGameAsync()
+    {
+        gameManager.State = GameState.Waiting;
+
+        await Task.WhenAll(gameManager.Players.Select(p => gameManager.MarkPlayerAsWaitingAsync(p.Id)));
+    }
+
+    private async Task ForceStartGameAsync()
+    {
+        await Task.WhenAll(gameManager.Players.Select(p => gameManager.MarkPlayerAsReadyAsync(p.Id)));
+    }
+
+    private async Task DeclareWinnerAsync(Player player)
+    {
+        await gameManager.PlayerWon(player.Id);
+
+        message = $"Player {player.Name} has won the game.";
+    }
+
+    #endregion
+
+    private string GetGameStateColor()
+    {
+        return gameManager.State switch
+        {
+            GameState.Waiting => "bg-secondary",
+            GameState.RedLight => "bg-danger",
+            GameState.YellowLight => "bg-warning",
+            GameState.GreenLight => "bg-success",
+            GameState.Finished => "bg-dark",
+            _ => "bg-secondary"
+        };
+    }
+
+    private string GetPlayerStateColor(PlayerState state)
+    {
+        return state switch
+        {
+            PlayerState.Waiting => "bg-secondary",
+            PlayerState.Ready => "bg-primary",
+            PlayerState.Playing => "bg-info text-dark",
+            PlayerState.Lost => "bg-danger",
+            PlayerState.Won => "bg-success",
+            _ => "bg-secondary"
+        };
+    }
+
+    private string GenerateDeviceId()
+    {
+        return Guid.NewGuid().ToString();
+    }
+
+    private void Reset()
+    {
+        gameManager.Reset();
+
+        message = "Game has been reset.";
+    }
+}

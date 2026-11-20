@@ -1,0 +1,30 @@
+services:
+    webapp:
+        container_name: RedLightGreenLight
+        build:
+            context: .
+            dockerfile: RedLightGreenLight/Dockerfile
+        ports:
+            - "80:8080"
+        environment:
+            ASPNETCORE_URLS: http://+:8080
+            Mqtt__Host: mosquitto
+            Mqtt__Port: 1883
+        depends_on:
+            mosquitto:
+                condition: service_started
+        restart: unless-stopped
+
+    mosquitto:
+        container_name: RedLightGreenLight_Mosquitto
+        image: eclipse-mosquitto:2
+        ports:
+            - "1883:1883"
+        volumes:
+            - ./Mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+            - mosquitto_data:/mosquitto/data
+        restart: unless-stopped
+
+volumes:
+    mosquitto_data:
+        name: RedLightGreenLight_Mosquitto_data

@@ -8,7 +8,7 @@
 
         public Player(string id)
         {
-            Name = "Player " + id;
+            Name = NameGenerator.Generate();
             Id = id;
         }
     }

@@ -2,13 +2,19 @@
 #include "movementDetectionAccelerometer.h"
 #include "config.h"
 #include "display.h"
+#include <SPI.h>
+#include <WiFiNINA.h>
+#include <vector>
+#include "signalStrength.h"
 
 MKRIoTCarrier carrier;
+
+int strenghtAverage = 200;
 
 
 void setup() {
   Serial.begin(9600);
-  while (!Serial);
+  //while (!Serial);
 
   carrier.begin();
 
@@ -17,9 +23,17 @@ void setup() {
     while (1);
   }
 
-  showLedAll(carrier, 2);
-  showScreenText(carrier, "Player 1", "has won", "the game", ST77XX_RED);
-  //showLedBlink(carrier, 0, 4, 500);
+  showLedAll(carrier, 1);
+
+  while (WiFi.begin(STRENGTH_SSID, STRENGTH_PASS) != WL_CONNECTED) {
+    Serial.println("Connection failed. Retrying...");
+    delay(3000);
+  }
+
+  showLedAll(carrier, 0);
+  Serial.println("Connected!");
+
+  //showScreenText(carrier, "Player 1", "has won", "the game", ST77XX_RED);
 }
 
 
@@ -34,12 +48,21 @@ void loop() {
     carrier.IMUmodule.readAcceleration(x, y, z);
 
     if (readMotion(x, y, z)) {
-      Serial.println("Moved during red light!");
+      //Serial.println("Moved during red light!");
     }
     else {
-      Serial.println("No movement");
+      //Serial.println("No movement");
     }
 
+
+    averageStrength(millis(), strenghtAverage);
+
+    if (strenghtAverage < 48) {
+      showLedAll(carrier, 0);
+    }
+    else {
+      showLedAll(carrier, 2);
+    }
     
 
     // prints all movements for debuggin

@@ -9,6 +9,13 @@ namespace RedLightGreenLight.Components
         [Inject]
         protected WebSocketService WebSocketService { get; set; } = default!;
 
+        [Inject]
+        protected ILoggerFactory LoggerFactory { get; set; } = default!;
+
+        private ILogger? _logger;
+
+        protected ILogger Logger => _logger ??= LoggerFactory.CreateLogger(GetType());
+
         private bool _subscribed;
 
         public override Task SetParametersAsync(ParameterView parameters)
@@ -19,6 +26,8 @@ namespace RedLightGreenLight.Components
                 WebSocketService.OnSignalR += HandleSignalR;
 
                 _subscribed = true;
+
+                Logger.LogInformation($"Page {GetType().Name} opened and is listening for live updates.");
             }
 
             return base.SetParametersAsync(parameters);
@@ -33,7 +42,16 @@ namespace RedLightGreenLight.Components
         {
             return InvokeAsync(async () =>
             {
-                await OnWebSocketEventAsync(webSocketEvent);
+                try
+                {
+                    await OnWebSocketEventAsync(webSocketEvent);
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogError(ex, $"Page {GetType().Name} failed to handle {webSocketEvent.Event}.");
+
+                    throw;
+                }
 
                 StateHasChanged();
             });
@@ -46,6 +64,8 @@ namespace RedLightGreenLight.Components
                 WebSocketService.OnSignalR -= HandleSignalR;
 
                 _subscribed = false;
+
+                Logger.LogInformation($"Page {GetType().Name} closed and stopped listening for live updates.");
             }
         }
     }

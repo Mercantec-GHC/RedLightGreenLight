@@ -1,0 +1,130 @@
+@inject LogService LogService
+
+@implements IDisposable
+
+@page "/logs"
+
+<PageTitle>Logs</PageTitle>
+
+<div class="container py-4" style="max-width: 1100px;">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+        <h1 class="m-0">📜 Logs</h1>
+
+        <div class="btn-group">
+            <button class="btn btn-sm @(filter is null ? "btn-dark" : "btn-outline-dark")" @onclick="() => filter = null">All</button>
+
+            @foreach (var level in FilterLevels)
+            {
+                <button class="btn btn-sm @(filter == level ? GetButtonColor(level) : GetButtonColor(level).Replace("btn-", "btn-outline-"))" @onclick="() => filter = level">@GetLevelName(level)</button>
+            }
+        </div>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span class="fw-semibold">Newest first</span>
+            <span class="badge bg-secondary rounded-pill">@FilteredEntries.Count()</span>
+        </div>
+
+        @if (!FilteredEntries.Any())
+        {
+            <div class="card-body text-center text-muted fst-italic">No log entries.</div>
+        }
+        else
+        {
+            <ul class="list-group list-group-flush font-monospace small">
+                @foreach (var entry in FilteredEntries)
+                {
+                    <li class="list-group-item d-flex flex-wrap column-gap-3 row-gap-1 align-items-start @GetRowColor(entry.Level)">
+                        <span class="text-muted text-nowrap">@entry.Date.ToLocalTime().ToString("HH:mm:ss")</span>
+                        <span class="badge @GetBadgeColor(entry.Level)" style="min-width: 4.5rem;">@GetLevelName(entry.Level)</span>
+                        <span class="text-muted text-nowrap" title="@entry.Category">@GetShortCategory(entry.Category)</span>
+                        <span class="text-break" style="flex: 1 1 20rem; min-width: 0;">@entry.Message</span>
+                    </li>
+                }
+            </ul>
+        }
+    </div>
+</div>
+
+@code {
+    private static readonly LogLevel[] FilterLevels = { LogLevel.Information, LogLevel.Warning, LogLevel.Error };
+
+    private readonly List<LogEntry> entries = new();
+
+    private LogLevel? filter;
+
+    private IEnumerable<LogEntry> FilteredEntries => entries.Where(e => filter is null || NormalizeLevel(e.Level) == filter);
+
+    protected override void OnInitialized()
+    {
+        entries.AddRange(LogService.Entries.Reverse());
+
+        LogService.OnLog += OnLog;
+    }
+
+    private void OnLog(LogEntry entry)
+    {
+        InvokeAsync(() =>
+        {
+            entries.Insert(0, entry);
+
+            StateHasChanged();
+        });
+    }
+
+    private static LogLevel NormalizeLevel(LogLevel level)
+    {
+        return level switch
+        {
+            LogLevel.Critical => LogLevel.Error,
+            LogLevel.Trace or LogLevel.Debug => LogLevel.Information,
+            _ => level
+        };
+    }
+
+    private static string GetLevelName(LogLevel level)
+    {
+        return level == LogLevel.Information ? "Info" : level.ToString();
+    }
+
+    private static string GetShortCategory(string category)
+    {
+        return category.Split('.').Last();
+    }
+
+    private static string GetBadgeColor(LogLevel level)
+    {
+        return NormalizeLevel(level) switch
+        {
+            LogLevel.Warning => "bg-warning text-dark",
+            LogLevel.Error => "bg-danger",
+            _ => "bg-info text-dark"
+        };
+    }
+
+    private static string GetButtonColor(LogLevel level)
+    {
+        return NormalizeLevel(level) switch
+        {
+            LogLevel.Warning => "btn-warning",
+            LogLevel.Error => "btn-danger",
+            _ => "btn-info"
+        };
+    }
+
+    private static string GetRowColor(LogLevel level)
+    {
+        return NormalizeLevel(level) switch
+        {
+            LogLevel.Warning => "list-group-item-warning",
+            LogLevel.Error => "list-group-item-danger",
+            _ => string.Empty
+        };
+    }
+
+    public void Dispose()
+    {
+        LogService.OnLog -= OnLog;
+    }
+}

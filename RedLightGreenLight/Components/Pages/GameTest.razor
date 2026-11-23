@@ -101,7 +101,7 @@
                                     break;
                             }
 
-                            <button class="btn btn-sm btn-outline-danger" title="Remove player" @onclick="() => RemovePlayer(player)">✕</button>
+                            <button class="btn btn-sm btn-outline-danger" title="Remove player" @onclick="() => RemovePlayerAsync(player)">✕</button>
                         </div>
                     </li>
                 }
@@ -122,9 +122,9 @@
         message = $"Player added successfully.";
     }
 
-    private void RemovePlayer(Player player)
+    private async Task RemovePlayerAsync(Player player)
     {
-        gameManager.RemovePlayer(player.Id);
+        await gameManager.RemovePlayerAsync(player.Id);
 
         message = $"Player removed successfully.";
     }
@@ -175,7 +175,7 @@
 
     private async Task DeclareWinnerAsync(Player player)
     {
-        await gameManager.PlayerWon(player.Id);
+        await gameManager.PlayerWon(player);
 
         message = $"Player {player.Name} has won the game.";
     }

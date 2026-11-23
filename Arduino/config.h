@@ -7,3 +7,6 @@ const char PLAYER_NAME[] = "Arduino N";
 const char SERVER_HOST[] = "_______.mercantec.tech";
 const uint16_t SERVER_PORT = 443;
 // const uint32_t HEARTBEAT_MS = 2000;
+
+const char STRENGTH_SSID[] = "Arduino_Link";
+const char STRENGTH_PASS[] = "SignalTest123";

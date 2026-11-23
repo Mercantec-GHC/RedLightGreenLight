@@ -1,5 +1,6 @@
 using RedLightGreenLight.Components;
 using RedLightGreenLight.Services;
+using RedLightGreenLight.Services.Logging;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -7,6 +8,8 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents(o => o.DetailedErrors = true);
 
+builder.Services.AddSingleton<LogService>();
+builder.Services.AddSingleton<ILoggerProvider>(sp => sp.GetRequiredService<LogService>());
 builder.Services.AddSingleton<WebSocketService>();
 builder.Services.AddSingleton<GameManager>();
 builder.Services.AddHostedService<MQTTListenerService>();

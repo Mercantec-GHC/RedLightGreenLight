@@ -13,6 +13,7 @@ builder.Services.AddSingleton<ILoggerProvider>(sp => sp.GetRequiredService<LogSe
 builder.Services.AddSingleton<WebSocketService>();
 builder.Services.AddSingleton<GameManager>();
 builder.Services.AddHostedService<MQTTListenerService>();
+builder.Services.AddHostedService<GameHandler>();
 
 var app = builder.Build();
 

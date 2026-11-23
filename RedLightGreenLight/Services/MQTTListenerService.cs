@@ -160,7 +160,7 @@ namespace RedLightGreenLight.Services
                     break;
 
                 case "offline":
-                    _gameManager.RemovePlayer(deviceId);
+                    await _gameManager.RemovePlayerAsync(deviceId);
 
                     _logger.LogInformation($"Device {deviceId} disconnected.");
 

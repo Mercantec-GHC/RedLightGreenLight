@@ -6,8 +6,8 @@ namespace RedLightGreenLight.Services
 {
     public class MQTTListenerService : BackgroundService
     {
-        private const string EventsTopic = "devices/+/events";
-        private const string StatusTopic = "devices/+/status";
+        private const string EventsTopic = "server/+/events";
+        private const string StatusTopic = "server/+/status";
 
         private readonly string _host;
         private readonly int _port;
@@ -116,7 +116,6 @@ namespace RedLightGreenLight.Services
 
         private async Task HandleMessage(string topic, string payload)
         {
-            // Topic format: devices/{deviceId}/{type}
             string[] parts = topic.Split('/');
 
             if (parts.Length != 3)

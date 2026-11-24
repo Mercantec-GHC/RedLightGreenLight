@@ -1,5 +1,6 @@
 <Solution>
   <Project Path="Arduino/Arduino.csproj" />
+  <Project Path="GoalArduino/GoalArduino.csproj" />
   <Project Path="Domain/Domain.csproj" />
   <Project Path="RedLightGreenLight/RedLightGreenLight.csproj" />
 </Solution>

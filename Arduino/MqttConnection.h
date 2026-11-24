@@ -8,33 +8,30 @@
 #include "Helpers.h"
 #include "Config.h"
 
+// The game event handler is defined in Events.h.
+inline void handleEvent(const char* event, JsonVariant data);
 
-// Network clients
-WiFiClient wifiClient;
-MqttClient mqtt(wifiClient);
+extern WiFiClient wifiClient;
+extern MqttClient mqtt;
+extern String deviceId;
+extern String serverAllTopic;
+extern String serverDeviceTopic;
+extern String arduinoStatusTopic;
+extern String arduinoDeviceTopic;
+extern unsigned long lastWifiAttempt;
+extern unsigned long lastMqttAttempt;
+extern bool wifiAttempted;
+extern bool mqttAttempted;
+extern bool mqttWasConnected;
 
-
-// Device information
-String deviceId = "";
-
-String eventTopic = "";
-String statusTopic = "";
-
-
-// Connection state
-unsigned long lastWifiAttempt = 0;
-unsigned long lastMqttAttempt = 0;
-
-bool wifiAttempted = false;
-bool mqttAttempted = false;
-bool mqttWasConnected = false;
-
-
-// Handle incoming MQTT messages
+// Handle arduino MQTT messages
 void onMqttMessage(int messageSize) {
 
   String topic = mqtt.messageTopic();
-  String payload = "";
+  String payload;
+  if (messageSize > 0) {
+    payload.reserve((unsigned int)messageSize);
+  }
 
   while (mqtt.available()) {
     payload += (char)mqtt.read();
@@ -47,11 +44,28 @@ void onMqttMessage(int messageSize) {
 
   Serial.print("Message: ");
   Serial.println(payload);
+
+  StaticJsonDocument<512> document;
+  DeserializationError error = deserializeJson(document, payload);
+  if (error) {
+    Serial.print("Invalid MQTT JSON: ");
+    Serial.println(error.c_str());
+    return;
+  }
+
+  const char* eventName = document["event"] | "";
+  if (eventName[0] == '\0') {
+    Serial.println("MQTT message has no event name");
+    return;
+  }
+
+  JsonVariant data = document["data"].as<JsonVariant>();
+  handleEvent(eventName, data);
 }
 
 
 // Initialize MQTT configuration
-void beginMqttConnection() {
+inline void beginMqttConnection() {
 
   mqtt.setKeepAliveInterval(MQTT_KEEP_ALIVE_MS);
   mqtt.setConnectionTimeout(5000);
@@ -63,13 +77,13 @@ void beginMqttConnection() {
 
 
 // Check WiFi connection and reconnect if needed
-bool ensureWifi() {
+inline bool ensureWifi() {
 
   if (WiFi.status() == WL_CONNECTED) {
     return true;
   }
 
-  unsigned long currentTime = millis();
+  const unsigned long currentTime = millis();
 
   if (
     !wifiAttempted || currentTime - lastWifiAttempt >= WIFI_RECONNECT_INTERVAL_MS) {
@@ -87,7 +101,7 @@ bool ensureWifi() {
 
 
 // Generate a unique device ID and MQTT topics
-void buildTopics() {
+inline void buildTopics() {
 
   byte mac[6];
 
@@ -108,8 +122,10 @@ void buildTopics() {
 
   deviceId = "mkr-" + String(macAddress);
 
-  eventTopic = String(MQTT_TOPIC_PREFIX) + "/" + deviceId + "/events";
-  statusTopic = String(MQTT_TOPIC_PREFIX) + "/" + deviceId + "/status";
+  serverAllTopic = "server/all/events";
+  serverDeviceTopic = "server/" + deviceId + "/events";
+  arduinoStatusTopic = "arduino/" + deviceId + "/status";
+  arduinoDeviceTopic = "arduino/" + deviceId + "/events";
 
   // Set MQTT client ID
   mqtt.setId(deviceId);
@@ -117,16 +133,22 @@ void buildTopics() {
   Serial.println("Device ID generated:");
   Serial.println(deviceId);
 
-  Serial.println("Event topic:");
-  Serial.println(eventTopic);
+  Serial.println("All server Event topic:");
+  Serial.println(serverAllTopic);
 
-  Serial.println("Status topic:");
-  Serial.println(statusTopic);
+  Serial.println("Device server Event topic:");
+  Serial.println(serverDeviceTopic);
+
+  Serial.println("Status arduino topic:");
+  Serial.println(arduinoStatusTopic);
+
+  Serial.println("Status arduino event topic:");
+  Serial.println(arduinoDeviceTopic);
 }
 
 
 // Check if MQTT connection was lost
-void checkConnectionLost() {
+inline void checkConnectionLost() {
 
   bool connected = mqtt.connected();
 
@@ -140,16 +162,15 @@ void checkConnectionLost() {
 
 
 // Connect to MQTT broker
-bool ensureMqtt() {
+inline bool ensureMqtt() {
 
   if (mqtt.connected()) {
     return true;
   }
 
-  unsigned long currentTime = millis();
+  const unsigned long currentTime = millis();
 
-  if (
-    mqttAttempted && currentTime - lastMqttAttempt < MQTT_RECONNECT_INTERVAL_MS) {
+  if (mqttAttempted && currentTime - lastMqttAttempt < MQTT_RECONNECT_INTERVAL_MS) {
     return false;
   }
 
@@ -160,7 +181,7 @@ bool ensureMqtt() {
 
   mqtt.setKeepAliveInterval(5 * 1000);  // ms, how often the broker expects a sign of life
 
-  mqtt.beginWill(statusTopic, true, 1);  // topic, retain, QoS
+  mqtt.beginWill(arduinoStatusTopic, true, 1);  // topic, retain, QoS
   mqtt.print("offline");
   mqtt.endWill();
 
@@ -169,11 +190,11 @@ bool ensureMqtt() {
     Serial.println("MQTT connected!");
 
     // Subscribe to commands from backend
-    mqtt.subscribe(eventTopic.c_str());
+    mqtt.subscribe(serverAllTopic.c_str());
+    mqtt.subscribe(serverDeviceTopic.c_str());
+    Serial.println("Subscribed to event topics");
 
-    Serial.println("Subscribed to event topic");
-
-    mqtt.beginMessage(statusTopic, true, 1);
+    mqtt.beginMessage(arduinoStatusTopic, true, 1);
     mqtt.print("online");
     mqtt.endMessage();
 
@@ -188,7 +209,7 @@ bool ensureMqtt() {
 
 
 // Publish an event to backend
-bool publishEvent(const char* eventName) {
+inline bool publishEvent(const char* eventName) {
 
   if (!mqtt.connected()) {
     Serial.println("Cannot publish: MQTT disconnected");
@@ -213,7 +234,7 @@ bool publishEvent(const char* eventName) {
   }
 
   // Publish message
-  mqtt.beginMessage(eventTopic.c_str());
+  mqtt.beginMessage(arduinoDeviceTopic.c_str());
 
   mqtt.write(
     (const uint8_t*)payload,
@@ -233,7 +254,7 @@ bool publishEvent(const char* eventName) {
 
 
 // Main MQTT connection handler
-void mqttConnectionLoop() {
+inline void mqttConnectionLoop() {
 
   // Check for lost MQTT connection
   checkConnectionLost();

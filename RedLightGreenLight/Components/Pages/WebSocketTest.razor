@@ -1,89 +1,188 @@
-@page "/websocket-test"
-@inject WebSocketService WebSocketService
-@implements IDisposable
+@inherits BasePage
 
-<PageTitle>WebSocket test</PageTitle>
+@page "/test/websocket"
 
-<h1>WebSocket test</h1>
+<PageTitle>WebSocket Test</PageTitle>
 
-<div class="mb-3">
-    <select class="form-select w-auto d-inline-block" @bind="selectedEvent">
-        @foreach (var gameEvent in Enum.GetValues<GameEvent>())
+<div class="container py-4" style="max-width: 900px;">
+    <h1 class="mb-4">📡 WebSocket test</h1>
+
+    <div class="card shadow-sm mb-4">
+        <div class="card-header fw-semibold">Send event</div>
+
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label">Event</label>
+
+                    <select class="form-select" @bind="selectedEvent">
+                        @foreach (var gameEvent in Enum.GetValues<GameEvent>())
+                        {
+                            <option value="@gameEvent">@gameEvent</option>
+                        }
+                    </select>
+                </div>
+
+                <div class="col-md-6">
+                    <label class="form-label">Device ID <span class="text-muted small">(only for "Send to device")</span></label>
+
+                    <input class="form-control" placeholder="e.g. a1b2c3d4e5f6" @bind="deviceId" />
+                </div>
+
+                <div class="col-12">
+                    <label class="form-label">Data <span class="text-muted small">(optional – JSON or plain text)</span></label>
+
+                    <textarea class="form-control font-monospace" rows="4" placeholder='{ "playerId": "abc", "distance": 1.5 }' @bind="dataInput"></textarea>
+                </div>
+            </div>
+        </div>
+
+        <div class="card-footer d-flex flex-wrap gap-2 justify-content-end">
+            <button class="btn btn-outline-primary" @onclick="SendSignalR">Send SignalR</button>
+            <button class="btn btn-secondary" @onclick="SendToDevice">Send to device</button>
+            <button class="btn btn-warning" @onclick="SendToEveryone">Send to everyone</button>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(status))
+    {
+        <div class="alert @(statusIsError ? "alert-danger" : "alert-success") d-flex justify-content-between align-items-center gap-3 py-2" role="alert">
+            <span>@status</span>
+            <button type="button" class="btn-close flex-shrink-0" style="font-size: 0.65rem;" @onclick="() => status = string.Empty"></button>
+        </div>
+    }
+
+    <div class="card shadow-sm">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span class="fw-semibold">Received via SignalR</span>
+
+            <div class="d-flex align-items-center gap-2">
+                <span class="badge bg-secondary rounded-pill">@received.Count</span>
+                <button class="btn btn-sm btn-outline-secondary" @onclick="() => received.Clear()" disabled="@(received.Count == 0)">Clear</button>
+            </div>
+        </div>
+
+        @if (received.Count == 0)
         {
-            <option value="@gameEvent">@gameEvent</option>
+            <div class="card-body text-center text-muted fst-italic">Nothing received yet.</div>
         }
-    </select>
+        else
+        {
+            <ul class="list-group list-group-flush">
+                @foreach (var webSocketEvent in received)
+                {
+                    <li class="list-group-item">
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="text-muted small font-monospace">@webSocketEvent.Date.ToLocalTime().ToString("HH:mm:ss")</span>
+                            <span class="badge bg-primary">@webSocketEvent.Event</span>
+                        </div>
 
-    <button class="btn btn-primary" @onclick="SendSignalR">Send SignalR</button>
-    <button class="btn btn-secondary" @onclick="SendMosquitto">Send Mosquitto</button>
+                        @if (webSocketEvent.Data is not null)
+                        {
+                            <pre class="bg-light border rounded p-2 mt-2 mb-0 small">@FormatData(webSocketEvent.Data)</pre>
+                        }
+                    </li>
+                }
+            </ul>
+        }
+    </div>
 </div>
 
-@if (!string.IsNullOrEmpty(status))
-{
-    <p>@status</p>
-}
-
-<h4>Received via SignalR</h4>
-
-@if (received.Count == 0)
-{
-    <p>Nothing received yet.</p>
-}
-else
-{
-    <ul>
-        @foreach (var webSocketEvent in received)
-        {
-            <li>@webSocketEvent.Date.ToLocalTime().ToString("HH:mm:ss") - @webSocketEvent.Event</li>
-        }
-    </ul>
-}
-
 @code {
+    private static readonly JsonSerializerOptions PrettyJson = new() { WriteIndented = true };
+
     private readonly List<WebSocketEvent> received = new();
 
     private GameEvent selectedEvent = GameEvent.GreenLight;
 
+    private string deviceId = string.Empty;
+
+    private string dataInput = string.Empty;
+
     private string status = string.Empty;
 
-    protected override void OnInitialized()
+    private bool statusIsError;
+
+    protected override Task OnWebSocketEventAsync(WebSocketEvent webSocketEvent)
     {
-        WebSocketService.OnSignalR += OnSignalR;
+        received.Insert(0, webSocketEvent);
+
+        return Task.CompletedTask;
     }
 
-    private Task OnSignalR(WebSocketEvent webSocketEvent)
+    private WebSocketEvent CreateEvent()
     {
-        return InvokeAsync(() =>
-        {
-            received.Insert(0, webSocketEvent);
+        return new WebSocketEvent(selectedEvent, ParseData());
+    }
 
-            StateHasChanged();
-        });
+    private object? ParseData()
+    {
+        if (string.IsNullOrWhiteSpace(dataInput))
+        {
+            return null;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<JsonElement>(dataInput);
+        }
+        catch (JsonException)
+        {
+            return dataInput;
+        }
+    }
+
+    private static string FormatData(object data)
+    {
+        return data is string text ? text : JsonSerializer.Serialize(data, PrettyJson);
+    }
+
+    private void SetStatus(string text, bool isError = false)
+    {
+        status = text;
+
+        statusIsError = isError;
     }
 
     private async Task SendSignalR()
     {
-        await WebSocketService.SendSignalRAsync(new WebSocketEvent(selectedEvent, DateTime.UtcNow));
+        await WebSocketService.SendToWebAppAsync(CreateEvent());
 
-        status = $"Sent {selectedEvent} via SignalR.";
+        SetStatus($"Sent {selectedEvent} via SignalR.");
     }
 
-    private async Task SendMosquitto()
+    private async Task SendToDevice()
     {
+        if (string.IsNullOrWhiteSpace(deviceId))
+        {
+            SetStatus("Enter a device ID first.", true);
+
+            return;
+        }
+
         try
         {
-            await WebSocketService.SendMosquittoAsync(new WebSocketEvent(selectedEvent, DateTime.UtcNow));
+            await WebSocketService.SendToDeviceByIdAsync(deviceId, CreateEvent());
 
-            status = $"Sent {selectedEvent} to Mosquitto.";
+            SetStatus($"Sent {selectedEvent} to device {deviceId}.");
         }
         catch (Exception ex)
         {
-            status = $"Failed to send to Mosquitto: {ex.Message}";
+            SetStatus($"Failed to send to Mosquitto: {ex.Message}", true);
         }
     }
 
-    public void Dispose()
+    private async Task SendToEveryone()
     {
-        WebSocketService.OnSignalR -= OnSignalR;
+        try
+        {
+            await WebSocketService.SendToEveryoneAsync(CreateEvent());
+
+            SetStatus($"Sent {selectedEvent} to everyone.");
+        }
+        catch (Exception ex)
+        {
+            SetStatus($"Failed to send to Mosquitto: {ex.Message}", true);
+        }
     }
 }

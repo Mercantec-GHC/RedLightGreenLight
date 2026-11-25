@@ -4,34 +4,58 @@ using MQTTnet;
 
 namespace RedLightGreenLight.Services
 {
-    /// <summary>
-    /// A background service that listens for messages from the devices on the Mosquitto broker.
-    /// Devices publish game events to "devices/{deviceId}/events" and their connection status
-    /// ("online"/"offline", with "offline" set as Last Will) to "devices/{deviceId}/status".
-    /// </summary>
     public class MQTTListenerService : BackgroundService
     {
-        private const string EventsTopic = "devices/+/events";
-        private const string StatusTopic = "devices/+/status";
+        private const string EventsTopic = "server/+/events";
+        private const string StatusTopic = "server/+/status";
 
         private readonly string _host;
         private readonly int _port;
+        private readonly GameManager _gameManager;
+        private readonly WebSocketService _webSocketService;
+        private readonly ILogger<MQTTListenerService> _logger;
 
-        public MQTTListenerService(IConfiguration configuration)
+        public MQTTListenerService(IConfiguration configuration, GameManager gameManager, WebSocketService webSocketService, ILogger<MQTTListenerService> logger)
         {
             _host = configuration["MQTT:Host"] ?? "localhost";
             _port = configuration.GetValue("MQTT:Port", 1883);
+            _gameManager = gameManager;
+            _webSocketService = webSocketService;
+            _logger = logger;
+
+            _logger.LogInformation($"MQTT listener configured for broker {_host}:{_port}.");
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
+            _logger.LogInformation("MQTT listener is starting.");
+
             var factory = new MqttClientFactory();
 
             using var client = factory.CreateMqttClient();
 
-            client.ApplicationMessageReceivedAsync += e =>
+            client.ApplicationMessageReceivedAsync += async e =>
             {
-                HandleMessage(e.ApplicationMessage.Topic, e.ApplicationMessage.ConvertPayloadToString());
+                string topic = e.ApplicationMessage.Topic;
+
+                _logger.LogInformation($"MQTT message received on {topic}.");
+
+                try
+                {
+                    await HandleMessage(topic, e.ApplicationMessage.ConvertPayloadToString());
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, $"Unhandled error while handling MQTT message on {topic}.");
+                }
+            };
+
+            client.DisconnectedAsync += e =>
+            {
+                if (!stoppingToken.IsCancellationRequested)
+                {
+                    _logger.LogWarning($"MQTT listener lost the connection to {_host}:{_port}. Reason: {e.Reason}.");
+                }
 
                 return Task.CompletedTask;
             };
@@ -52,11 +76,13 @@ namespace RedLightGreenLight.Services
                 {
                     try
                     {
+                        _logger.LogInformation($"MQTT listener connecting to {_host}:{_port}...");
+
                         await client.ConnectAsync(options, stoppingToken);
 
                         await client.SubscribeAsync(subscribeOptions, stoppingToken);
 
-                        Console.WriteLine($"MQTT listener connected to {_host}:{_port}.");
+                        _logger.LogInformation($"MQTT listener connected to {_host}:{_port} and subscribed to {EventsTopic} and {StatusTopic}.");
                     }
                     catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
                     {
@@ -64,7 +90,7 @@ namespace RedLightGreenLight.Services
                     }
                     catch (Exception ex)
                     {
-                        Console.WriteLine($"MQTT listener could not connect to {_host}:{_port}: {ex.Message}");
+                        _logger.LogError($"MQTT listener could not connect to {_host}:{_port}: {ex.Message}. Retrying in 5 seconds.");
                     }
                 }
 
@@ -78,19 +104,24 @@ namespace RedLightGreenLight.Services
                 }
             }
 
+            _logger.LogInformation("MQTT listener is stopping.");
+
             if (client.IsConnected)
             {
                 await client.DisconnectAsync();
+
+                _logger.LogInformation($"MQTT listener disconnected from {_host}:{_port}.");
             }
         }
 
-        private static void HandleMessage(string topic, string payload)
+        private async Task HandleMessage(string topic, string payload)
         {
-            // Topic format: devices/{deviceId}/{type}
             string[] parts = topic.Split('/');
 
             if (parts.Length != 3)
             {
+                _logger.LogWarning($"Ignored MQTT message on unexpected topic {topic}.");
+
                 return;
             }
 
@@ -99,38 +130,55 @@ namespace RedLightGreenLight.Services
             switch (parts[2])
             {
                 case "status":
-                    HandleStatus(deviceId, payload.Trim());
+                    await HandleStatus(deviceId, payload.Trim());
                     break;
 
                 case "events":
-                    HandleEvent(deviceId, payload);
-                    break;
-            }
-        }
-
-        private static void HandleStatus(string deviceId, string status)
-        {
-            switch (status)
-            {
-                case "online":
-                    // TODO: Call GameManager when a device connects.
-                    Console.WriteLine($"Device {deviceId} connected.");
-                    break;
-
-                case "offline":
-                    // TODO: Call GameManager when a device disconnects.
-                    Console.WriteLine($"Device {deviceId} disconnected.");
+                    await HandleEvent(deviceId, payload);
                     break;
 
                 default:
-                    Console.WriteLine($"Device {deviceId} sent unknown status: {status}");
+                    _logger.LogWarning($"Ignored MQTT message from device {deviceId} with unknown type {parts[2]}.");
                     break;
             }
         }
 
-        private static void HandleEvent(string deviceId, string payload)
+        private async Task HandleStatus(string deviceId, string status)
+        {
+            _logger.LogInformation($"Device {deviceId} reported status {status}.");
+
+            switch (status)
+            {
+                case "online":
+                    _gameManager.AddPlayer(deviceId);
+
+                    _logger.LogInformation($"Device {deviceId} connected.");
+
+                    await _webSocketService.SendToWebAppAsync(new WebSocketEvent(GameEvent.PlayerJoined, deviceId));
+
+                    break;
+
+                case "offline":
+                    await _gameManager.RemovePlayerAsync(deviceId);
+
+                    _logger.LogInformation($"Device {deviceId} disconnected.");
+
+                    await _webSocketService.SendToWebAppAsync(new WebSocketEvent(GameEvent.PlayerLeft, deviceId));
+
+                    break;
+
+                default:
+                    _logger.LogWarning($"Device {deviceId} sent unknown status: {status}");
+
+                    break;
+            }
+        }
+
+        private async Task HandleEvent(string deviceId, string payload)
         {
             WebSocketEvent? webSocketEvent;
+
+            _logger.LogInformation($"Attempting to deserialize event from device {deviceId} with payload: {payload}");
 
             try
             {
@@ -138,26 +186,60 @@ namespace RedLightGreenLight.Services
             }
             catch (JsonException ex)
             {
-                Console.WriteLine($"Device {deviceId} sent invalid payload: {payload} ({ex.Message})");
+                _logger.LogWarning($"Device {deviceId} sent invalid payload: {payload} ({ex.Message})");
 
                 return;
             }
 
             if (webSocketEvent is null)
             {
+                _logger.LogWarning($"Couldn't deserialize event from device {deviceId} with payload: {payload}");
+
                 return;
             }
+
+            _logger.LogInformation($"Device {deviceId} sent {webSocketEvent.Event}.");
 
             switch (webSocketEvent.Event)
             {
                 case GameEvent.Goal:
-                    // TODO: Call GameManager to register this device as the goal.
-                    Console.WriteLine($"Device {deviceId} registered as the goal.");
+                    await _gameManager.ConvertPlayerToGoalAsync(deviceId);
+
+                    _logger.LogInformation($"Device {deviceId} registered as the goal.");
+                    
+                    break;
+
+                case GameEvent.PlayerReady:
+                    await _gameManager.MarkPlayerAsReadyAsync(deviceId);
+
+                    _logger.LogInformation($"Device {deviceId} is ready at {webSocketEvent.Date:O}");
+
+                    break;
+
+                case GameEvent.PlayerWaiting:
+                    await _gameManager.MarkPlayerAsWaitingAsync(deviceId);
+
+                    _logger.LogInformation($"Device {deviceId} is waiting at {webSocketEvent.Date:O}");
+                    
+                    break;
+
+                case GameEvent.PlayerMoved:
+                    await _gameManager.PlayerMovedAsync(deviceId);
+
+                    _logger.LogInformation($"Device {deviceId} moved at {webSocketEvent.Date:O}");
+
+                    break;
+
+                case GameEvent.PlayerEliminated:
+                    await _gameManager.EliminatePlayerAsync(deviceId);
+
+                    _logger.LogInformation($"Device {deviceId} eliminated at {webSocketEvent.Date:O}");
+                    
                     break;
 
                 default:
-                    // TODO: Call GameManager with the event.
-                    Console.WriteLine($"Device {deviceId} sent {webSocketEvent.Event} at {webSocketEvent.Date:O}");
+                    _logger.LogWarning($"Device {deviceId} sent {webSocketEvent.Event}, which the server doesn't handle.");
+
                     break;
             }
         }

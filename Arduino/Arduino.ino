@@ -3,7 +3,11 @@
 #include <WiFiNINA.h>
 #include <ArduinoMqttClient.h>
 #include <ArduinoJson.h>
+#include <vector>
+#include <SPI.h>
 
+#include "display.h"
+#include "signalStrength.h"
 #include "Helpers.h"
 #include "MqttConnection.h"
 #include "State.h"
@@ -44,15 +48,30 @@ float previousY = 0.0f;
 float previousZ = 1.0f;
 float tolerance = 0.15f;
 
+int strenghtAverage = 200;
+
 void setup() {
   Serial.begin(9600);
+
+  carrier.begin();
 
   if (!carrier.IMUmodule.begin()) {
     Serial.println("Failed to initialize IMU!");
   }
-  
 
   beginMqttConnection();
+
+  // showLedAll(carrier, 1);
+
+  // while (WiFi.begin(STRENGTH_SSID, STRENGTH_PASS) != WL_CONNECTED) {
+  //   Serial.println("Connection failed. Retrying...");
+  //   delay(3000);
+  // }
+
+  // showLedAll(carrier, 0);
+  // Serial.println("Connected!");
+
+  //showScreenText(carrier, "Player 1", "has won", "the game", ST77XX_RED);
 }
 
 
@@ -77,11 +96,7 @@ void loop() {
     }
   }
 
-  carrier.Buttons.update();
 
-  if (carrier.Buttons.onTouchDown(TOUCH2)) {
-    onReadyPressed();
-  }
 
   // Check connection
   checkConnectionLost();
@@ -99,6 +114,21 @@ void loop() {
 
   // Process MQTT messages
   mqtt.poll();
+
+  // averageStrength(millis(), strenghtAverage);
+
+  //   if (strenghtAverage < 48) {
+  //     showLedAll(carrier, 0);
+  //   }
+  //   else {
+  //     showLedAll(carrier, 2);
+  //   }
+
+  carrier.Buttons.update();
+
+  if (carrier.Buttons.onTouchDown(TOUCH2)) {
+    onReadyPressed();
+  }
 
   // prints all movements for debuggin
   // Serial.print("x ");

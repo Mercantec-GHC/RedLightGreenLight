@@ -17,5 +17,5 @@ const uint32_t MQTT_KEEP_ALIVE_MS = 3000;
 const uint32_t WIFI_RECONNECT_INTERVAL_MS = 10000;
 const uint32_t MQTT_RECONNECT_INTERVAL_MS = 5000;
 
-// MQTT topics
-const char MQTT_TOPIC_PREFIX[] = "devices";
+const char STRENGTH_SSID[] = "Arduino_Link";
+const char STRENGTH_PASS[] = "SignalTest123";

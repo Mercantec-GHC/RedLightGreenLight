@@ -15,49 +15,72 @@ namespace RedLightGreenLight.Services
         private readonly IMqttClient _mqttClient;
         private readonly MqttClientOptions _mqttOptions;
         private readonly SemaphoreSlim _connectLock = new(1, 1);
-        private readonly string _topic = "game/events";
+        private const string BroadcastTopic = "arduino/all/events";
+        private readonly ILogger<WebSocketService> _logger;
+        private readonly string _host;
+        private readonly int _port;
 
-        /// <summary>
-        /// Blazor components subscribe to this and call InvokeAsync(StateHasChanged),
-        /// which pushes the update to the browser over the existing SignalR circuit.
-        /// </summary>
         public event Func<WebSocketEvent, Task>? OnSignalR;
 
-        public WebSocketService(IConfiguration configuration)
+        public WebSocketService(IConfiguration configuration, ILogger<WebSocketService> logger)
         {
-            string host = configuration["MQTT:Host"] ?? "localhost";
-            int port = configuration.GetValue("MQTT:Port", 1883);
+            _logger = logger;
+
+            _host = configuration["MQTT:Host"] ?? "localhost";
+            _port = configuration.GetValue("MQTT:Port", 1883);
 
             _mqttClient = new MqttClientFactory().CreateMqttClient();
 
+            _mqttClient.DisconnectedAsync += e =>
+            {
+                if (e.ClientWasConnected)
+                {
+                    _logger.LogWarning($"WebSocketService lost the MQTT connection to {_host}:{_port}. Reason: {e.Reason}.");
+                }
+
+                return Task.CompletedTask;
+            };
+
             _mqttOptions = new MqttClientOptionsBuilder()
-                .WithTcpServer(host, port)
+                .WithTcpServer(_host, _port)
                 .WithClientId($"RedLightGreenLight-{Guid.NewGuid()}")
                 .Build();
+
+            _logger.LogInformation($"WebSocketService configured for MQTT broker {_host}:{_port}.");
         }
 
-        public async Task SendMosquittoAsync(WebSocketEvent webSocketEvent)
+        public Task SendToDeviceByIdAsync(string deviceId, WebSocketEvent webSocketEvent)
         {
-            await EnsureConnected();
+            _logger.LogInformation($"Sending {webSocketEvent.Event} to device {deviceId}.");
 
-            var message = new MqttApplicationMessageBuilder()
-                .WithTopic(_topic)
-                .WithPayload(JsonSerializer.Serialize(webSocketEvent, JsonOptions))
-                .Build();
-
-            await _mqttClient.PublishAsync(message);
+            return PublishAsync($"arduino/{deviceId}/events", webSocketEvent);
         }
 
-        public async Task SendSignalRAsync(WebSocketEvent webSocketEvent)
+        public async Task SendToEveryoneAsync(WebSocketEvent webSocketEvent)
+        {
+            _logger.LogInformation($"Sending {webSocketEvent.Event} to everyone (all devices and the web app).");
+
+            await PublishAsync(BroadcastTopic, webSocketEvent);
+
+            await SendToWebAppAsync(webSocketEvent);
+        }
+
+        public async Task SendToWebAppAsync(WebSocketEvent webSocketEvent)
         {
             var handlers = OnSignalR;
 
             if (handlers is null)
             {
+                _logger.LogInformation($"No web app pages are listening. {webSocketEvent.Event} was not delivered to the web app.");
+
                 return;
             }
 
-            foreach (Func<WebSocketEvent, Task> handler in handlers.GetInvocationList())
+            Delegate[] subscribers = handlers.GetInvocationList();
+
+            _logger.LogInformation($"Sending {webSocketEvent.Event} to {subscribers.Length} web app page(s).");
+
+            foreach (Func<WebSocketEvent, Task> handler in subscribers)
             {
                 try
                 {
@@ -65,8 +88,33 @@ namespace RedLightGreenLight.Services
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"SignalR subscriber failed: {ex.Message}");
+                    _logger.LogError(ex, $"SignalR subscriber failed while handling {webSocketEvent.Event}.");
                 }
+            }
+        }
+
+        private async Task PublishAsync(string topic, WebSocketEvent webSocketEvent)
+        {
+            try
+            {
+                await EnsureConnected();
+
+                string payload = JsonSerializer.Serialize(webSocketEvent, JsonOptions);
+
+                var message = new MqttApplicationMessageBuilder()
+                    .WithTopic(topic)
+                    .WithPayload(payload)
+                    .Build();
+
+                await _mqttClient.PublishAsync(message);
+
+                _logger.LogInformation($"Published to {topic}: {payload}");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Failed to publish {webSocketEvent.Event} to {topic}.");
+
+                throw;
             }
         }
 
@@ -83,7 +131,11 @@ namespace RedLightGreenLight.Services
             {
                 if (!_mqttClient.IsConnected)
                 {
+                    _logger.LogInformation($"WebSocketService connecting to MQTT broker {_host}:{_port}...");
+
                     await _mqttClient.ConnectAsync(_mqttOptions);
+
+                    _logger.LogInformation($"WebSocketService connected to MQTT broker {_host}:{_port}.");
                 }
             }
             finally
@@ -94,6 +146,8 @@ namespace RedLightGreenLight.Services
 
         public async ValueTask DisposeAsync()
         {
+            _logger.LogInformation("WebSocketService is shutting down.");
+
             if (_mqttClient.IsConnected)
             {
                 await _mqttClient.DisconnectAsync();

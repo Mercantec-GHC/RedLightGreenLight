@@ -96,8 +96,6 @@ void loop() {
     }
   }
 
-
-
   // Check connection
   checkConnectionLost();
 
@@ -124,9 +122,10 @@ void loop() {
   //     showLedAll(carrier, 2);
   //   }
 
+  // for ready up button with 02
   carrier.Buttons.update();
 
-  if (carrier.Buttons.onTouchDown(TOUCH2)) {
+  if (carrier.Buttons.onTouchDown(TOUCH2) && !gameHasStarted && !playerEliminated) {
     onReadyPressed();
   }
 

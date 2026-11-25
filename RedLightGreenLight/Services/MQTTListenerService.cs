@@ -6,8 +6,8 @@ namespace RedLightGreenLight.Services
 {
     public class MQTTListenerService : BackgroundService
     {
-        private const string EventsTopic = "server/+/events";
-        private const string StatusTopic = "server/+/status";
+        private const string EventsTopic = "arduino/+/events";
+        private const string StatusTopic = "arduino/+/status";
 
         private readonly string _host;
         private readonly int _port;

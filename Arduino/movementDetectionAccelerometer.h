@@ -1,40 +1,64 @@
-float previousX = 0.00;
-float previousY = 0.00;
-float previousZ = 0.00;
+#pragma once
 
-float tolerance = 0.15f;
-bool redLight = true;
-bool stateSaved = false;
+#include <Arduino.h>
+#include <math.h>
+#include "State.h"
+
+extern float currentX;
+extern float currentY;
+extern float currentZ;
+extern float previousX;
+extern float previousY;
+extern float previousZ;
+extern float tolerance;
+
+// Save the players position when RedLight starts from Events.h
+inline void savePosition(float x, float y, float z) {
+  // Keep the latest accelerometer sample available to the event handler.
+  currentX = x;
+  currentY = y;
+  currentZ = z;
+}
 
 // logic for detecting movement
-bool readMotion(float x, float y, float z){
+inline bool readMotion(float x, float y, float z){
 
-  // Saves the initial state ONCE
-  if (!stateSaved) {
-    previousX = x;
-    previousY = y;
-    previousZ = z;
-
-    stateSaved = true;
+  // prevents movement checks when not Redlight
+   if (!gameHasStarted || !redLightActive || playerEliminated) {
     return false;
   }
 
   // Calculate differences 
-  float differenceX = abs(x - previousX);
-  float differenceY = abs(y - previousY);
-  float differenceZ = abs(z - previousZ);
+  const float differenceX = abs(x - previousX);
+  const float differenceY = abs(y - previousY);
+  const float differenceZ = abs(z - previousZ);
 
   // Checks if any movement changed beyond tolerance
   if (differenceX > tolerance ||
       differenceY > tolerance ||
       differenceZ > tolerance) {
-
+    onMotionDetected();
+    // Serial.print("differenceX: ");
+    // Serial.print(differenceX);
+    // Serial.print("differenceY: ");
+    // Serial.print(differenceY);
+    // Serial.print("differenceZ: ");
+    // Serial.print(differenceZ);
+    // Serial.print("previousX: ");
+    // Serial.print(previousX);
+    // Serial.print("previousY: ");
+    // Serial.print(previousY);
+    // Serial.print("previousZ: ");
+    // Serial.print(previousZ);
+    // Serial.print("tolerance: ");
+    // Serial.print(tolerance);
+    // Serial.print("currentX: ");
+    // Serial.print(currentX);
+    // Serial.print("currentY: ");
+    // Serial.print(currentY);
+    // Serial.print("currentZ: ");
+    // Serial.print(currentZ);
     return true;
   }
   return false;
-}
-
-void startRedLight() {
-  stateSaved = false;
-  redLight = true;
 }

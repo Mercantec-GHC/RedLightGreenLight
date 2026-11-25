@@ -15,7 +15,7 @@ namespace RedLightGreenLight.Services
         private readonly IMqttClient _mqttClient;
         private readonly MqttClientOptions _mqttOptions;
         private readonly SemaphoreSlim _connectLock = new(1, 1);
-        private const string BroadcastTopic = "arduino/all/events";
+        private const string BroadcastTopic = "server/all/events";
         private readonly ILogger<WebSocketService> _logger;
         private readonly string _host;
         private readonly int _port;
@@ -53,7 +53,7 @@ namespace RedLightGreenLight.Services
         {
             _logger.LogInformation($"Sending {webSocketEvent.Event} to device {deviceId}.");
 
-            return PublishAsync($"arduino/{deviceId}/events", webSocketEvent);
+            return PublishAsync($"server/{deviceId}/events", webSocketEvent);
         }
 
         public async Task SendToEveryoneAsync(WebSocketEvent webSocketEvent)

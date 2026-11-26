@@ -18,6 +18,7 @@ inline void savePosition(float x, float y, float z) {
   currentX = x;
   currentY = y;
   currentZ = z;
+
 }
 
 // logic for detecting movement

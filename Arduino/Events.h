@@ -33,14 +33,11 @@ inline void handleEvent(const char* event){
     onGameOver();
   }
   else if (strcmp(event, "RedLight") == 0) {
-    // Use the most recent IMU sample as the Red Light starting position.
     savePosition(currentX, currentY, currentZ);
-    redLightActive = true;
-    eliminationEnabled = gameHasStarted && !playerEliminated;
+    onRedLight();
   }
   else if (strcmp(event, "YellowLight") == 0) {
-    redLightActive = false;
-    eliminationEnabled = false;
+    onYellowLight();
   }
   else if (strcmp(event, "GreenLight") == 0) {
     onGreenLight();

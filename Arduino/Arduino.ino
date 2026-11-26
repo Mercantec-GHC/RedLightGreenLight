@@ -6,10 +6,15 @@
 #include <WiFiNINA.h>
 #include <vector>
 #include "signalStrength.h"
+#include <ArduinoBLE.h>
 
 MKRIoTCarrier carrier;
 
 int strenghtAverage = 200;
+
+BLEDevice goal;
+unsigned long lastMeasurement = 0;
+
 
 
 void setup() {
@@ -25,15 +30,24 @@ void setup() {
 
   showLedAll(carrier, 1);
 
-  while (WiFi.begin(STRENGTH_SSID, STRENGTH_PASS) != WL_CONNECTED) {
-    Serial.println("Connection failed. Retrying...");
-    delay(3000);
+  //while (WiFi.begin(STRENGTH_SSID, STRENGTH_PASS) != WL_CONNECTED) {
+  //  Serial.println("Connection failed. Retrying...");
+  //  delay(3000);
+  //}
+
+  //showLedAll(carrier, 0);
+  //Serial.println("Connected!");
+
+
+  if (!BLE.begin()) {
+    Serial.println("BLE failed!");
+    while (1);
   }
 
-  showLedAll(carrier, 0);
-  Serial.println("Connected!");
+  BLE.scanForName("RedLightGoal");
+  Serial.println("Searching for goal...");
 
-  //showScreenText(carrier, "Player 1", "has won", "the game", ST77XX_RED);
+  showScreenText(carrier, "Player", "is searching", "", ST77XX_WHITE);
 }
 
 
@@ -42,6 +56,55 @@ void setup() {
 // left & right = x
 // up and down = z
 void loop() {
+  BLE.poll();
+
+  if (!goal || !goal.connected()) {
+    BLEDevice device = BLE.available();
+
+    if (device) {
+      BLE.stopScan();
+
+      Serial.println("Connecting...");
+      showScreenText(carrier, "", "Connecting...", "", ST77XX_WHITE);
+
+      if (device.connect()) {
+        goal = device;
+        Serial.println("Connected!");
+        showScreenText(carrier, "", "Connected!", "", ST77XX_WHITE);
+      } else {
+        Serial.println("Connection failed");
+        showScreenText(carrier, "", "Connection failed", "", ST77XX_WHITE);
+        BLE.scanForName("RedLightGoal");
+      }
+    }
+
+    return;
+  }
+
+  if (millis() - lastMeasurement >= 100) {
+    lastMeasurement = millis();
+
+    int rssi = goal.rssi();
+
+    if (rssi == 127) {
+      Serial.println("Invalid RSSI");
+      return;
+    }
+
+    Serial.print("RSSI: ");
+    Serial.println(rssi);
+
+    if (rssi >= -48) {
+      Serial.println("GOAL REACHED!");
+      showScreenText(carrier, "", "GOAL REACHED!", "", ST77XX_WHITE);
+      showLedAll(carrier, 0);
+    }
+    else {
+      showLedAll(carrier, 2);
+    }
+  }
+  
+  
   float x, y, z;
 
   if (carrier.IMUmodule.accelerationAvailable()) {
@@ -53,17 +116,19 @@ void loop() {
     else {
       //Serial.println("No movement");
     }
+  }
 
 
-    averageStrength(millis(), strenghtAverage);
+  //averageStrength(millis(), strenghtAverage);
 
-    if (strenghtAverage < 48) {
-      showLedAll(carrier, 0);
-    }
-    else {
-      showLedAll(carrier, 2);
-    }
+  //if (strenghtAverage < 48) {
+  //  showLedAll(carrier, 0);
+  //}
+  //else {
+  //  showLedAll(carrier, 2);
+  //}
     
+
 
     // prints all movements for debuggin
     // Serial.print("x ");
@@ -74,5 +139,4 @@ void loop() {
     // Serial.print('\t');
     // Serial.print("z ");
     // Serial.println(z);
-  }
 }

@@ -6,7 +6,6 @@
 #include <vector>
 #include <SPI.h>
 
-#include "display.h"
 #include "signalStrength.h"
 #include "Helpers.h"
 #include "MqttConnection.h"

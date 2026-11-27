@@ -1,9 +1,11 @@
+#include "Adafruit_ST77xx.h"
 #pragma once
 
 #include <Arduino.h>
 #include <ArduinoJson.h>
 #include <string.h>
 
+#include "display.h"
 
 extern bool gameHasStarted;
 extern bool eliminationEnabled;
@@ -22,7 +24,7 @@ inline void eliminate() {
   playerEliminated = true;
   eliminationEnabled = false;
   redLightActive = false;
-
+  showScreenText("you moved", "during red", "gameover", ST77XX_WHITE);
 }
 
 inline void onGameStarted() {
@@ -30,14 +32,14 @@ inline void onGameStarted() {
   eliminationEnabled = false;
   playerEliminated = false;
   redLightActive = false;
-
+  showScreenText("game", "has started", "", ST77XX_WHITE);
 }
 
 inline void onGameOver() {
   gameHasStarted = false;
   eliminationEnabled = false;
   redLightActive = false;
-
+  showScreenText("game", "over", "", ST77XX_WHITE);
 }
 
 inline void onPlayerWon(JsonVariant data) {
@@ -53,16 +55,40 @@ inline void onPlayerWon(JsonVariant data) {
   bool isMe = deviceId == winnerId;
 
   if (isMe) {
-    Serial.println("This device won the game!");
+    Serial.println("You won the game!");
+    showScreenText("You", "won", "", ST77XX_WHITE);
   } else {
     Serial.print("Game winner: ");
     Serial.println(winnerName);
+    showScreenText(winnerName, "has won", "", ST77XX_WHITE);
   }
 }
 
 inline void onGreenLight() {
+  if (!playerEliminated){
   eliminationEnabled = false;
   redLightActive = false;
+  showLedAll(0); // green
+  showScreenText("go", "", "", ST77XX_WHITE);
+  }
+}
+
+inline void onYellowLight() {
+  if (!playerEliminated){
+  redLightActive = false;
+  eliminationEnabled = false;
+  showLedAll(1); // yellow
+  showScreenText("", "get ready", "", ST77XX_WHITE);
+  }
+}
+
+inline void onRedLight(){
+  if (!playerEliminated){
+  redLightActive = true;
+  eliminationEnabled = gameHasStarted && !playerEliminated;
+  showLedAll(2); // red
+  showScreenText("", "", "STOP", ST77XX_WHITE);
+  }
 }
 
 inline void onPlayerEliminated(JsonVariant data) {
@@ -82,10 +108,11 @@ inline void onPlayerEliminated(JsonVariant data) {
 
 // Call when the 02 button is pressed
 inline void onReadyPressed() {
-  if (gameHasStarted || playerEliminated) {
-    return;
-  } 
+  if (!gameHasStarted || !playerEliminated) {
   sendEvent("PlayerReady");
+  showScreenText("you", "are", "ready", ST77XX_WHITE);
+  } 
+  
 }
 
 

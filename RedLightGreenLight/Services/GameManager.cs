@@ -4,58 +4,77 @@ namespace RedLightGreenLight.Services
 {
     public class GameManager
     {
-        public List<Player> Players { get; private set; } = new List<Player>();
-        public Goal? Goal { get; set; }
+        private List<Player> players { get; set; } = new List<Player>();
+        public IReadOnlyList<Player> Players => players.AsReadOnly();
 
-        public int MaxPlayers { get; private set; } = 5;
+        public Goal? Goal { get; private set; }
+
+        public int MaxPlayers { get; set; } = 5;
         public GameDifficulty Difficulty { get; set; } = GameDifficulty.Easy;
 
         public GameState State { get; set; } = GameState.Waiting;
-        public int TimeLimit { get; set; } // in seconds
-        public int TimeBetweenStops { get; set; } // in seconds
 
         private readonly WebSocketService _webSocketService;
+        private readonly ILogger<GameManager> _logger;
 
-        public GameManager(WebSocketService webSocketService)
+        public GameManager(WebSocketService webSocketService, ILogger<GameManager> logger)
         {
             _webSocketService = webSocketService;
+            _logger = logger;
+
+            _logger.LogInformation($"Game manager created. Max players: {MaxPlayers}, difficulty: {Difficulty}.");
         }
 
         #region Player Management
 
         public void AddPlayer(string id)
         {
+            _logger.LogInformation($"Player {id} is trying to join the game.");
+
+            if (Goal?.Id == id || players.Exists(p => p.Id == id))
+            {
+                _logger.LogInformation($"Device {id} is already in the game.");
+
+                return;
+            }
+
             if (IsGameStarted())
             {
-                Console.WriteLine("Cannot join a game that has already started.");
+                _logger.LogWarning($"Player {id} cannot join because the game has already started (state: {State}).");
 
                 return;
             }
 
             if (Players.Count >= MaxPlayers)
             {
-                Console.WriteLine("Maximum number of players reached.");
+                _logger.LogWarning($"Player {id} cannot join because the maximum of {MaxPlayers} players is reached.");
 
                 return;
             }
 
-            Players.Add(new Player(id));
+            players.Add(new Player(id));
+
+            _logger.LogInformation($"Player {id} joined the game. Players: {Players.Count}/{MaxPlayers}.");
         }
 
         public async Task ConvertPlayerToGoalAsync(string id)
         {
+            _logger.LogInformation($"Converting player {id} to the goal.");
+
             var player = Players.FirstOrDefault(p => p.Id == id);
 
             if (player is null)
             {
-                Console.WriteLine("Goal must be a player in the game.");
+                _logger.LogWarning($"Player {id} cannot be the goal because they are not in the game.");
 
                 return;
             }
 
-            Players.Remove(player);
+            players.Remove(player);
 
             Goal = new Goal(id);
+
+            _logger.LogInformation($"Player {id} is now the goal. Remaining players: {Players.Count}.");
 
             await _webSocketService.SendToDeviceByIdAsync(id, new WebSocketEvent(GameEvent.PlayerIsGoal));
 
@@ -64,53 +83,84 @@ namespace RedLightGreenLight.Services
 
         public async Task MarkPlayerAsReadyAsync(string playerId)
         {
-            var player = Players.FirstOrDefault(p => p.Id == playerId);
-            
-            if (player is null)
+            if (IsGameStarted())
             {
-                Console.WriteLine("Player not found.");
-            
+                _logger.LogWarning($"Cannot mark player {playerId} as ready because the game is running.");
+
                 return;
             }
-         
+
+            var player = Players.FirstOrDefault(p => p.Id == playerId);
+
+            if (player is null)
+            {
+                _logger.LogWarning($"Cannot mark player {playerId} as ready because they were not found.");
+
+                return;
+            }
+
             player.State = PlayerState.Ready;
+
+            int readyCount = Players.Count(p => p.State == PlayerState.Ready);
+
+            _logger.LogInformation($"Player {playerId} is ready. Ready players: {readyCount}/{Players.Count}.");
 
             await _webSocketService.SendToWebAppAsync(new WebSocketEvent(GameEvent.PlayerReady, playerId));
 
-            if (Players.All(p => p.State == PlayerState.Ready))
+            if (readyCount != Players.Count)
             {
-                Console.WriteLine("All players are ready. Starting the game...");
-             
-                await StartGameAsync();
+                return;
             }
+
+            _logger.LogInformation("All players are ready. Starting the game...");
+
+            await StartGameAsync();
         }
 
         public async Task MarkPlayerAsWaitingAsync(string playerId)
         {
+            if (IsGameStarted())
+            {
+                _logger.LogWarning($"Cannot mark player {playerId} as waiting because the game is running.");
+
+                return;
+            }
+
             var player = Players.FirstOrDefault(p => p.Id == playerId);
 
             if (player is null)
             {
-                Console.WriteLine("Player not found.");
+                _logger.LogWarning($"Cannot mark player {playerId} as waiting because they were not found.");
 
                 return;
             }
 
             player.State = PlayerState.Waiting;
 
+            _logger.LogInformation($"Player {playerId} is no longer ready.");
+
             await _webSocketService.SendToWebAppAsync(new WebSocketEvent(GameEvent.PlayerWaiting, playerId));
         }
 
-        public void RemovePlayer(string playerId)
+        public async Task RemovePlayerAsync(string playerId)
         {
-            if (!Players.Exists(p => p.Id == playerId))
+            if (Goal?.Id == playerId)
             {
-                Console.WriteLine("Player not found.");
+                _logger.LogWarning($"The goal {playerId} disconnected. The goal is not removed automatically.");
 
                 return;
             }
 
-            Players.RemoveAll(p => p.Id == playerId);
+            if (players.RemoveAll(p => p.Id == playerId) == 0)
+            {
+                _logger.LogWarning($"Cannot remove player {playerId} because they were not found.");
+
+                return;
+            }
+
+            _logger.LogInformation($"Player {playerId} left the game (state: {State}). Players: {Players.Count}/{MaxPlayers}.");
+
+            await EndGameIfNoPlayersLeftAsync();
         }
 
         #endregion
@@ -119,37 +169,43 @@ namespace RedLightGreenLight.Services
 
         public async Task StartGameAsync()
         {
+            _logger.LogInformation($"Trying to start the game with {Players.Count} players.");
+
+            if (IsGameStarted())
+            {
+                _logger.LogInformation($"Game has already started (state: {State}).");
+
+                return;
+            }
+
             if (Goal is null)
             {
-                Console.WriteLine("Cannot start a game without a goal.");
+                _logger.LogWarning("Cannot start a game without a goal.");
 
                 return;
             }
 
             if (Players.Count < 2)
             {
-                Console.WriteLine("Cannot start a game with less than 2 players.");
+                _logger.LogWarning($"Cannot start a game with less than 2 players (currently {Players.Count}).");
 
                 return;
             }
 
-            if (Players.Exists(p => p.State != PlayerState.Ready))
+            var notReady = Players.Where(p => p.State != PlayerState.Ready).Select(p => p.Id).ToList();
+
+            if (notReady.Count > 0)
             {
-                Console.WriteLine("Cannot start a game with players who are not ready.");
+                _logger.LogWarning($"Cannot start the game because these players are not ready: {string.Join(", ", notReady)}.");
 
                 return;
             }
 
-            if (IsGameStarted())
-            {
-                Console.WriteLine("Game has already started.");
-
-                return;
-            }
-
-            Players.ForEach(p => p.State = PlayerState.Playing);
+            players.ForEach(p => p.State = PlayerState.Playing);
 
             State = GameState.GreenLight;
+
+            _logger.LogInformation($"Game started with {Players.Count} players and goal {Goal.Id}.");
 
             await _webSocketService.SendToEveryoneAsync(new WebSocketEvent(GameEvent.GameStarted));
         }
@@ -159,108 +215,112 @@ namespace RedLightGreenLight.Services
             return State != GameState.Waiting && State != GameState.Finished;
         }
 
-        public async Task EndGameAsync()
+        public async Task ChangeLightAsync(GameState light)
         {
-            State = GameState.Finished;
-
-            if (Players.Any(p => p.State == PlayerState.Won))
+            if (!IsGameStarted())
             {
-                var winner = Players.First(p => p.State == PlayerState.Won);
-
-                Players.Where(p => p.Id != winner.Id).ToList().ForEach(p => p.State = PlayerState.Lost);
-
-                Console.WriteLine($"Player {winner.Name} has won the game!");
-
-                await _webSocketService.SendToEveryoneAsync(new WebSocketEvent(GameEvent.PlayerWon, winner));
-
                 return;
             }
-            else
+
+            GameEvent lightEvent = light switch
             {
-                Console.WriteLine("No players won the game.");
+                GameState.GreenLight => GameEvent.GreenLight,
+                GameState.YellowLight => GameEvent.YellowLight,
+                GameState.RedLight => GameEvent.RedLight,
+                _ => throw new ArgumentException($"{light} is not a light.", nameof(light))
+            };
+
+            State = light;
+
+            _logger.LogInformation($"Light changed to {light}.");
+
+            await _webSocketService.SendToEveryoneAsync(new WebSocketEvent(lightEvent));
+        }
+
+        public async Task EndGameAsync()
+        {
+            _logger.LogInformation($"Ending the game (previous state: {State}).");
+
+            State = GameState.Finished;
+
+            var winner = Players.FirstOrDefault(p => p.State == PlayerState.Won);
+
+            if (winner is null)
+            {
+                _logger.LogInformation("No players won the game.");
 
                 await _webSocketService.SendToEveryoneAsync(new WebSocketEvent(GameEvent.GameOver));
 
                 return;
             }
+
+            Players.Where(p => p != winner).ToList().ForEach(p => p.State = PlayerState.Lost);
+
+            _logger.LogInformation($"Player {winner.Id} has won the game!");
+
+            await _webSocketService.SendToEveryoneAsync(new WebSocketEvent(GameEvent.PlayerWon, winner));
         }
 
-        public async Task PlayerMovedAsync(string playerId) 
+        public async Task PlayerMovedAsync(string playerId)
         {
             var player = Players.FirstOrDefault(p => p.Id == playerId);
 
-            if (player is null)
+            if (player?.State != PlayerState.Playing)
             {
-                Console.WriteLine("Player not found.");
+                _logger.LogWarning($"Movement from player {playerId} ignored because they are not playing.");
 
                 return;
             }
 
-            if (!player.State.Equals(PlayerState.Playing))
-            {
-                Console.WriteLine("Player is not playing.");
-
-                return;
-            }
-
-            Console.WriteLine($"Player {player.Name} has moved.");
+            _logger.LogInformation($"Player {playerId} moved during {State}.");
         }
 
         public async Task EliminatePlayerAsync(string playerId)
         {
             var player = Players.FirstOrDefault(p => p.Id == playerId);
 
-            if (player is null)
+            if (player?.State != PlayerState.Playing)
             {
-                Console.WriteLine("Player not found.");
+                _logger.LogWarning($"Cannot eliminate player {playerId} because they are not playing.");
 
-                return;
-            }
-
-            if (!player.State.Equals(PlayerState.Playing))
-            {
-                Console.WriteLine("Player is not playing.");
-                
                 return;
             }
 
             player.State = PlayerState.Lost;
 
-            Console.WriteLine($"Player {player.Name} has been eliminated from the game.");
-
-            if (Players.All(p => p.State == PlayerState.Lost))
-            {
-                Console.WriteLine("All players have lost. Ending the game.");
-
-                await EndGameAsync();
-                
-                return;
-            }
+            _logger.LogInformation($"Player {playerId} has been eliminated.");
 
             await _webSocketService.SendToDeviceByIdAsync(playerId, new WebSocketEvent(GameEvent.PlayerEliminated));
 
             await _webSocketService.SendToWebAppAsync(new WebSocketEvent(GameEvent.PlayerEliminated, playerId));
+
+            await EndGameIfNoPlayersLeftAsync();
         }
 
-        public async Task PlayerWon(string playerId)
+        public async Task PlayerWon(Player player)
         {
-            var player = Players.FirstOrDefault(p => p.Id == playerId);
-
-            if (player is null)
-            {
-                Console.WriteLine("Player not found.");
-
-                return;
-            }
-
             if (!player.State.Equals(PlayerState.Playing))
             {
-                Console.WriteLine("Player is not playing.");
+                _logger.LogWarning($"Player {player.Id} cannot win because they are not playing (state: {player.State}).");
 
                 return;
             }
 
             player.State = PlayerState.Won;
+
+            _logger.LogInformation($"Player {player.Id} reached the goal.");
+
+            await EndGameAsync();
+        }
+
+        private async Task EndGameIfNoPlayersLeftAsync()
+        {
+            if (!IsGameStarted() || players.Exists(p => p.State == PlayerState.Playing))
+            {
+                return;
+            }
+
+            _logger.LogInformation("No players are left. Ending the game.");
 
             await EndGameAsync();
         }
@@ -269,15 +329,17 @@ namespace RedLightGreenLight.Services
 
         public void Reset()
         {
-            Players.Clear();
+            _logger.LogInformation($"Resetting the game. Removing {Players.Count} players and the goal.");
+
+            players.Clear();
             Goal = null;
 
             MaxPlayers = 5;
             Difficulty = GameDifficulty.Easy;
 
             State = GameState.Waiting;
-            TimeLimit = 0;
-            TimeBetweenStops = 0;
+
+            _logger.LogInformation("Game has been reset.");
         }
     }
 }
